@@ -106,7 +106,8 @@ export function HeroShowcase({
             scrub: 0.5,
             pin: true,
             onUpdate: (self) => {
-              onUpdateNavState(self.progress > 0.18);
+              const isDark = self.progress > 0.18 && self.progress < 0.92;
+              onUpdateNavState(isDark);
             },
           },
         });

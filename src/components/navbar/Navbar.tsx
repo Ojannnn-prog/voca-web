@@ -21,31 +21,48 @@ interface NavbarProps {
 
 export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
   const router = useRouter();
+  const [scrollY, setScrollY] = useState(0);
   const [activeTab, setActiveTab] = useState<"home" | "programs" | "daftar" | "membership" | "account">("home");
+  const [activeSectionTitle, setActiveSectionTitle] = useState<string>("");
 
-  // Track active section on scroll for mobile bottom bar
+  // Track scroll position & active section across all sections
   useEffect(() => {
     const handleScroll = () => {
       const scrollPos = window.scrollY;
+      setScrollY(scrollPos);
+
+      const analyticsEl = document.getElementById("analytics-section");
       const programsEl = document.getElementById("programs");
       const membershipEl = document.getElementById("membership");
+      const pathwayEl = document.getElementById("pathway");
+      const aboutEl = document.getElementById("about");
 
-      if (scrollPos < 350) {
-        setActiveTab("home");
-      } else if (
-        programsEl &&
-        scrollPos >= programsEl.offsetTop - 250 &&
-        (!membershipEl || scrollPos < membershipEl.offsetTop - 250)
-      ) {
-        setActiveTab("programs");
-      } else if (membershipEl && scrollPos >= membershipEl.offsetTop - 250) {
+      if (aboutEl && scrollPos >= aboutEl.offsetTop - 260) {
+        setActiveSectionTitle("Tentang VOCA");
+      } else if (pathwayEl && scrollPos >= pathwayEl.offsetTop - 260) {
+        setActiveSectionTitle("Jalur Pembinaan");
+      } else if (membershipEl && scrollPos >= membershipEl.offsetTop - 260) {
         setActiveTab("membership");
+        setActiveSectionTitle("Biaya & Paket");
+      } else if (programsEl && scrollPos >= programsEl.offsetTop - 260) {
+        setActiveTab("programs");
+        setActiveSectionTitle("Katalog Program");
+      } else if (analyticsEl && scrollPos >= analyticsEl.offsetTop - 260) {
+        setActiveTab("home");
+        setActiveSectionTitle("Evaluasi & Riset");
+      } else {
+        setActiveTab("home");
+        setActiveSectionTitle("");
       }
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Safeguard: hero dark mode is ONLY valid during the pinned hero stage (< 650px)
+  const effectiveDarkMode = isDarkMode && scrollY < 650;
 
   const handleNavClick = (tab: "home" | "programs" | "daftar" | "membership" | "account", targetId?: string) => {
     setActiveTab(tab);
@@ -67,13 +84,14 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
   return (
     <>
       {/* ========================================================================= */}
-      {/* 1. TOP HEADER (DESKTOP: FLOATING PILL TETAP DI ATAS | MOBILE: CLEAN LOGO) */}
+      {/* 1. TOP HEADER (DESKTOP: FLOATING PILL | MOBILE: ENCLOSED FROSTED CAPSULE) */}
       {/* ========================================================================= */}
       <header
         id="navbar"
-        className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-6 md:px-8 py-3 transition-all duration-300 w-full"
+        className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3 transition-all duration-300 w-full"
       >
-        <div className="w-full flex items-center justify-between gap-2 sm:gap-4">
+        {/* DESKTOP VIEW (lg:flex, hidden on mobile) */}
+        <div className="hidden lg:flex w-full items-center justify-between gap-4 max-w-7xl mx-auto">
           {/* BRAND LOGO (KIRI) */}
           <Link
             href="/"
@@ -83,15 +101,15 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
           >
             <VocaLogo
               variant="full"
-              theme={isDarkMode ? "pink" : "color"}
+              theme={effectiveDarkMode ? "pink" : "color"}
               size="md"
             />
           </Link>
 
-          {/* DESKTOP ONLY: FLOATING WHITE CAPSULE PILL DI TENGAH (TETAP DI ATAS) */}
+          {/* DESKTOP ONLY: FLOATING WHITE CAPSULE PILL DI TENGAH */}
           <nav
             id="nav-pill"
-            className="hidden lg:flex items-center space-x-3.5 xl:space-x-6 px-5 py-2.5 xl:px-7 xl:py-2.5 bg-white/95 backdrop-blur-md rounded-full shadow-lg shadow-black/8 border border-neutral-200/90 text-xs xl:text-sm font-semibold transition-all duration-300 hover:shadow-xl shrink-0"
+            className="flex items-center space-x-3.5 xl:space-x-6 px-5 py-2.5 xl:px-7 xl:py-2.5 bg-white/95 backdrop-blur-md rounded-full shadow-lg shadow-black/8 border border-neutral-200/90 text-xs xl:text-sm font-semibold transition-all duration-300 hover:shadow-xl shrink-0"
           >
             {NAV_LINKS.map((item) => {
               const isRegistration = item.href === "#pendaftaran" || item.isSpecial;
@@ -118,21 +136,66 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
           </nav>
 
           {/* RIGHT ACTIONS: TOMBOL MASUK */}
-          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            {/* Tombol Masuk / Login */}
+          <div className="flex items-center space-x-3 shrink-0">
             <Link
               href="/login"
               className={`inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full transition-all border shrink-0 ${
-                isDarkMode
-                  ? "bg-white/10 text-white border-white/20 hover:bg-white/20"
-                  : "bg-white text-[#5E17EB] border-purple-200 hover:bg-purple-50 hover:border-purple-300 shadow-sm"
+                effectiveDarkMode
+                  ? "bg-white text-[#5E17EB] border-white/80 hover:bg-neutral-100 shadow-md"
+                  : "bg-[#5E17EB] text-white border-transparent hover:bg-[#4d10c7] shadow-sm shadow-purple-500/20"
               }`}
               title="Masuk ke Portal Member atau Panel Admin"
             >
-              <LogIn className="w-3.5 h-3.5 text-[#5E17EB]" />
+              <LogIn className="w-3.5 h-3.5" />
               <span>Masuk</span>
             </Link>
           </div>
+        </div>
+
+        {/* MOBILE VIEW (flex on mobile, lg:hidden) - FLOATING FROSTED BAR DENGAN SECTION CHIP */}
+        <div
+          className={`flex lg:hidden items-center justify-between gap-2 px-3.5 py-2 rounded-2xl sm:rounded-full transition-all duration-300 shadow-md ${
+            effectiveDarkMode
+              ? "bg-[#160033]/90 backdrop-blur-xl border border-white/20 shadow-purple-950/40 text-white"
+              : scrollY > 40
+              ? "bg-white/95 backdrop-blur-xl border border-neutral-200/90 shadow-lg shadow-black/6 text-neutral-900"
+              : "bg-white/90 backdrop-blur-md border border-neutral-200/70 shadow-sm text-neutral-900"
+          }`}
+        >
+          {/* LOGO RESMI VOCA */}
+          <Link
+            href="/"
+            className="transition-transform duration-200 active:scale-95 focus:outline-none shrink-0"
+            aria-label="Beranda VOCA"
+          >
+            <VocaLogo
+              variant="full"
+              theme={effectiveDarkMode ? "pink" : "color"}
+              size="sm"
+            />
+          </Link>
+
+          {/* ACTIVE SECTION BADGE CHIP (PENANDA SECTION YANG SEDANG DILIHAT DI MOBILE) */}
+          {activeSectionTitle && scrollY > 200 && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#5E17EB]/10 border border-[#5E17EB]/25 text-[10px] font-bold text-[#5E17EB] animate-fadeIn whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#5E17EB] animate-pulse" />
+              <span>{activeSectionTitle}</span>
+            </div>
+          )}
+
+          {/* TOMBOL MASUK DENGAN KONTRAS TINGGI SOLID */}
+          <Link
+            href="/login"
+            className={`inline-flex items-center gap-1 text-[11px] font-bold px-3.5 py-1.5 rounded-full transition-all shrink-0 ${
+              effectiveDarkMode
+                ? "bg-white text-[#5E17EB] hover:bg-neutral-100 shadow-sm"
+                : "bg-[#5E17EB] text-white hover:bg-[#4d10c7] shadow-sm shadow-purple-500/20 active:scale-95"
+            }`}
+            title="Masuk ke Portal Member atau Panel Admin"
+          >
+            <LogIn className="w-3 h-3" />
+            <span>Masuk</span>
+          </Link>
         </div>
       </header>
 
