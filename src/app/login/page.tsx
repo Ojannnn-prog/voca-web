@@ -18,16 +18,6 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const handleQuickFillAdmin = () => {
-    setUsername("adminvoca");
-    setPassword("admin123");
-  };
-
-  const handleQuickFillMember = () => {
-    setUsername("VOCA-2026-001");
-    setPassword("member123");
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -159,28 +149,6 @@ function LoginForm() {
               />
               <Lock className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3.5" />
             </div>
-          </div>
-
-          {/* Quick Demo Fill Helper */}
-          <div className="pt-1 flex items-center justify-between text-[11px]">
-            {role === "admin" ? (
-              <button
-                type="button"
-                onClick={handleQuickFillAdmin}
-                className="text-[#5E17EB] hover:underline font-semibold"
-              >
-                Isi Otomatis Kredensial Admin
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleQuickFillMember}
-                className="text-[#21649D] hover:underline font-semibold"
-              >
-                Isi Otomatis Akun Member Demo
-              </button>
-            )}
-            <span className="text-neutral-400">VOCA v1.0</span>
           </div>
 
           <button

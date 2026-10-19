@@ -14,9 +14,12 @@ export async function POST(request: Request) {
       const cleanPass = (password || "").trim();
 
       if (cleanUser === expectedAdminUser && cleanPass === expectedAdminPass) {
-        // Set admin session cookie
+        // Set signed cryptographic admin session cookie
+        const { createAdminSessionToken } = await import("@/lib/auth-session");
+        const signedAdminToken = await createAdminSessionToken();
+
         const cookieStore = await cookies();
-        cookieStore.set("voca_admin_session", "authenticated_admin", {
+        cookieStore.set("voca_admin_session", signedAdminToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
@@ -79,8 +82,11 @@ export async function POST(request: Request) {
         );
       }
 
+      const { createMemberSessionToken } = await import("@/lib/auth-session");
+      const signedMemberToken = await createMemberSessionToken(member.memberId);
+
       const cookieStore = await cookies();
-      cookieStore.set("voca_member_session", member.memberId, {
+      cookieStore.set("voca_member_session", signedMemberToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",

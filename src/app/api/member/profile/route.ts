@@ -3,62 +3,59 @@ import { cookies } from "next/headers";
 import { db } from "@/db";
 import { members, memberInvoices, financeTransactions } from "@/db/schema";
 import { eq, or, desc } from "drizzle-orm";
+import { verifyAdminSessionToken, verifyMemberSessionToken } from "@/lib/auth-session";
 
 export async function GET(request: Request) {
   try {
+    const cookieStore = await cookies();
+    const adminSession = cookieStore.get("voca_admin_session");
+    const memberSession = cookieStore.get("voca_member_session");
+
+    const isAdmin = await verifyAdminSessionToken(adminSession?.value);
+    const verifiedMemberId = await verifyMemberSessionToken(memberSession?.value);
+
+    // Keamanan Ketat: Wajib login terlebih dahulu
+    if (!isAdmin && !verifiedMemberId) {
+      return NextResponse.json(
+        { error: "Akses ditolak. Silakan login terlebih dahulu untuk mengakses portal anggota." },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const identifier = searchParams.get("identifier");
 
-    let memberRecord = null;
+    // Jika member biasa, hanya boleh mengakses profil miliknya sendiri
+    // Admin diperbolehkan menginspeksi akun anggota tertentu melalui identifier
+    const targetMemberId = isAdmin && identifier ? identifier.trim() : verifiedMemberId || identifier?.trim();
 
-    if (identifier) {
-      const cleanId = identifier.trim();
-      const results = await db
-        .select()
-        .from(members)
-        .where(or(eq(members.memberId, cleanId), eq(members.phoneNumber, cleanId)));
-
-      if (results.length > 0) {
-        memberRecord = results[0];
-      }
-    } else {
-      // Cek cookie member jika ada
-      const cookieStore = await cookies();
-      const memberCookie = cookieStore.get("voca_member_session") || cookieStore.get("voca_member_identifier");
-      if (memberCookie?.value) {
-        const results = await db
-          .select()
-          .from(members)
-          .where(
-            or(
-              eq(members.memberId, memberCookie.value),
-              eq(members.phoneNumber, memberCookie.value)
-            )
-          );
-        if (results.length > 0) {
-          memberRecord = results[0];
-        }
-      }
-
-      // Default fallback ke member pertama jika tidak ada sesi
-      if (!memberRecord) {
-        const defaultMembers = await db
-          .select()
-          .from(members)
-          .orderBy(members.id)
-          .limit(1);
-        if (defaultMembers.length > 0) {
-          memberRecord = defaultMembers[0];
-        }
-      }
+    if (!targetMemberId) {
+      return NextResponse.json(
+        { error: "Identitas anggota tidak valid." },
+        { status: 400 }
+      );
     }
 
-    if (!memberRecord) {
+    const results = await db
+      .select()
+      .from(members)
+      .where(
+        or(
+          eq(members.memberId, targetMemberId),
+          eq(members.username, targetMemberId),
+          eq(members.phoneNumber, targetMemberId)
+        )
+      )
+      .limit(1);
+
+    if (results.length === 0) {
       return NextResponse.json(
-        { error: "Data anggota tidak ditemukan." },
+        { error: "Data anggota tidak ditemukan dalam database." },
         { status: 404 }
       );
     }
+
+    const memberRecord = results[0];
 
     // Ambil daftar tagihan anggota dari member_invoices
     const memberInvoicesList = await db

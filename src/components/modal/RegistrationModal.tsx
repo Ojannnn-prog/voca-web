@@ -5,7 +5,6 @@ import {
   X,
   CheckCircle2,
   Loader2,
-  Sparkles,
   Calendar,
   Clock,
   Target,
@@ -735,7 +734,7 @@ Mohon arahannya untuk rekomendasi kelas & jadwal yang sesuai. Terima kasih!`;
                     </>
                   ) : activeTab === "free_trial" ? (
                     <>
-                      <Sparkles className="w-4 h-4 text-yellow-300" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-300" />
                       <span>Klaim Tiket Free Trial Class (Gratis)</span>
                     </>
                   ) : activeTab === "reguler" ? (

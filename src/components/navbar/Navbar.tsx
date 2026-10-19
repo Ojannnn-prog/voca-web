@@ -10,7 +10,6 @@ import {
   Search,
   Clock,
   User,
-  Sparkles,
   LogIn,
 } from "lucide-react";
 

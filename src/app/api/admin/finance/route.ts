@@ -5,10 +5,12 @@ import { financeTransactions } from "@/db/schema";
 import { generateTransactionCode, getSafeNextTransactionSequence } from "@/lib/account-generator";
 import { desc, eq } from "drizzle-orm";
 
+import { verifyAdminSessionToken } from "@/lib/auth-session";
+
 async function verifyAdminAuth() {
   const cookieStore = await cookies();
   const session = cookieStore.get("voca_admin_session");
-  return session?.value === "authenticated_admin";
+  return verifyAdminSessionToken(session?.value);
 }
 
 // 1. GET: Mengambil pembukuan kas & ringkasan saldo keuangan

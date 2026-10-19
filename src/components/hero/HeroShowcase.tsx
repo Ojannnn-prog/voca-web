@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { AthleticCanvas } from "./AthleticCanvas";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -193,9 +193,8 @@ export function HeroShowcase({
         <div className="flex items-center justify-center space-x-3 sm:space-x-4">
           <button
             onClick={onOpenRegister}
-            className="group inline-flex items-center gap-2 bg-[#5E17EB] hover:bg-[#4b11bd] active:bg-[#3b08a3] text-white text-xs sm:text-sm font-bold px-5 sm:px-6 py-2.5 sm:py-3 rounded-full transition-all shadow-md shadow-purple-500/25 hover:shadow-xl hover:scale-105 active:scale-95"
+            className="group inline-flex items-center gap-2 bg-[#5E17EB] hover:bg-[#4b11bd] active:bg-[#3b08a3] text-white text-xs sm:text-sm font-bold px-6 py-2.5 sm:py-3 rounded-full transition-all shadow-md shadow-purple-500/25 hover:shadow-xl hover:scale-105 active:scale-95"
           >
-            <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
             <span>Daftar Trial Class</span>
           </button>
           <a

@@ -123,21 +123,6 @@ export function Footer({ onOpenRegister }: FooterProps) {
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-[11px] text-neutral-500 gap-4">
           <p>© {new Date().getFullYear()} VOCA (Vortex Community of Athletics). All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <a
-              href="/admin"
-              className="hover:text-white transition flex items-center gap-1 text-purple-400 font-semibold"
-            >
-              <Shield className="w-3 h-3" />
-              <span>Panel Admin (CMS)</span>
-            </a>
-            <span>•</span>
-            <a
-              href="/member"
-              className="hover:text-white transition flex items-center gap-1 text-blue-400 font-semibold"
-            >
-              <span>Portal Member</span>
-            </a>
-            <span>•</span>
             <a href="#" className="hover:text-neutral-300 transition">
               Kebijakan Privasi
             </a>

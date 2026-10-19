@@ -20,7 +20,6 @@ import {
   Loader2,
   RefreshCw,
   Clock,
-  Sparkles,
   Plus,
   Search,
   Calendar,
@@ -1388,7 +1387,7 @@ export default function AdminDashboardPage() {
                   onClick={() => setIsBulkInvoiceOpen(true)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md shadow-purple-500/20 transition active:scale-95"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                  <Receipt className="w-3.5 h-3.5" />
                   <span>Terbitkan Tagihan Massal</span>
                 </button>
                 <button
@@ -1464,7 +1463,7 @@ export default function AdminDashboardPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-500/30 text-yellow-300 text-[11px] font-bold border border-yellow-300/30">
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-300" />
                   <span>Akun Anggota Berhasil Dibuat Otomatis!</span>
                 </div>
                 <h3 className="text-xl font-bold tracking-tight">
@@ -1811,7 +1810,7 @@ export default function AdminDashboardPage() {
                               className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-[11px] font-bold shadow-sm transition"
                               title="Terima & Otomatis Buat Akun (membervoca2026x)"
                             >
-                              <Sparkles className="w-3 h-3 text-yellow-300" />
+                              <UserCheck className="w-3 h-3 text-white" />
                               <span>Buat Akun</span>
                             </button>
                           )}
@@ -3257,7 +3256,7 @@ export default function AdminDashboardPage() {
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
             <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
               <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-600" />
+                <Receipt className="w-4 h-4 text-purple-600" />
                 <span>Terbitkan Tagihan Massal</span>
               </h3>
               <button
@@ -3754,7 +3753,7 @@ export default function AdminDashboardPage() {
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
             <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
               <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-600" />
+                <UserCheck className="w-4 h-4 text-[#5E17EB]" />
                 <span>Konversi & Auto-Generate Akun</span>
               </h3>
               <button
@@ -3799,7 +3798,7 @@ export default function AdminDashboardPage() {
                   {isLoading ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                    <UserCheck className="w-3.5 h-3.5 text-white" />
                   )}
                   <span>Buat Akun & Resmikan</span>
                 </button>

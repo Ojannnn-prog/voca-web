@@ -5,7 +5,7 @@ import { MEMBERSHIP_DATA } from "@/lib/constants";
 import {
   Users,
   Award,
-  Sparkles,
+  Target,
   HeartHandshake,
   LineChart,
   UserCheck,
@@ -37,7 +37,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
   const premiumIcons = [
     UserCheck, // Latihan privat 1 peserta 1 pelatih
     Award, // Pelatih berpengalaman
-    Sparkles, // Program latihan personal
+    Target, // Program latihan personal disesuaikan
     CalendarCheck, // Jadwal kesepakatan & ketersediaan
     ShieldCheck, // Pendampingan lebih intensif
     LineChart, // Evaluasi individual lebih terperinci
@@ -56,10 +56,6 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-14 sm:mb-20">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs font-bold uppercase tracking-wider text-[#FFC700] mb-4 backdrop-blur-md">
-            <Sparkles className="w-3.5 h-3.5 text-[#FFC700]" />
-            <span>VOCA Membership & Pricing</span>
-          </div>
           <h2 className="text-3xl sm:text-4xl md:text-5xl font-medium tracking-tight text-white mb-4">
             Pilihan Paket Keanggotaan VOCA
           </h2>
@@ -173,14 +169,8 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
             </div>
           </div>
 
-          {/* ================= 2. CARD PREMIUM PRIVATE CLASS (ChatGPT Plus Style Highlight) ================= */}
-          <div className="relative bg-gradient-to-b from-[#141B2D] to-[#0E131F] rounded-[28px] border-2 border-[#5E17EB]/60 p-7 sm:p-9 flex flex-col justify-between hover:border-[#5E17EB] transition-all duration-300 shadow-2xl shadow-purple-950/40 relative">
-            {/* Glowing Tag Top Right (mirip LIMITED TIME badge di ChatGPT Plus) */}
-            <div className="absolute -top-3.5 right-6 bg-[#5E17EB] text-white text-[11px] font-extrabold uppercase px-3.5 py-1 rounded-full shadow-lg shadow-purple-500/30 flex items-center gap-1.5 border border-purple-300/30">
-              <Sparkles className="w-3 h-3 text-yellow-300 animate-pulse" />
-              <span>{premiumData.badge}</span>
-            </div>
-
+          {/* ================= 2. CARD PREMIUM PRIVATE CLASS ================= */}
+          <div className="relative bg-gradient-to-b from-[#141B2D] to-[#0E131F] rounded-[28px] border-2 border-[#5E17EB]/60 p-7 sm:p-9 flex flex-col justify-between hover:border-[#5E17EB] transition-all duration-300 shadow-2xl shadow-purple-950/40">
             <div>
               {/* Header */}
               <div className="flex items-center justify-between mb-2">
@@ -200,7 +190,7 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
 
               {/* Highlight Tagline Feature */}
               <div className="p-3.5 rounded-xl bg-purple-900/20 border border-purple-500/20 mb-6 flex items-center gap-2.5 text-xs text-purple-200">
-                <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                <Target className="w-4 h-4 text-purple-400 shrink-0" />
                 <span>Program latihan disesuaikan 100% dengan kebutuhan fisik dan target Anda.</span>
               </div>
 
@@ -222,13 +212,12 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
                 </div>
               </div>
 
-              {/* CTA Button (Glowing Blue/Purple inspired by Claim Free Offer) */}
+              {/* CTA Button */}
               <button
                 type="button"
                 onClick={() => onSelectPlan("premium_private", "all")}
-                className="w-full py-3.5 px-6 rounded-full bg-gradient-to-r from-[#5E17EB] to-[#2563EB] hover:from-[#4f10cd] hover:to-[#1d4ed8] active:from-[#3b08a3] active:to-[#1e40af] text-white text-sm font-bold transition-all shadow-lg shadow-purple-600/30 hover:shadow-xl hover:shadow-purple-600/50 hover:scale-101 active:scale-98 flex items-center justify-center gap-2 mb-8"
+                className="w-full py-3.5 px-6 rounded-full bg-gradient-to-r from-[#5E17EB] to-[#2563EB] hover:from-[#4f10cd] hover:to-[#1d4ed8] active:from-[#3b08a3] active:to-[#1e40af] text-white text-sm font-bold transition-all shadow-lg shadow-purple-600/30 hover:shadow-xl hover:scale-101 active:scale-98 flex items-center justify-center gap-2 mb-8"
               >
-                <Sparkles className="w-4 h-4 text-yellow-300 animate-pulse" />
                 <span>Daftar Premium Private Class</span>
               </button>
 

@@ -4,10 +4,12 @@ import { db } from "@/db";
 import { trialLeads } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 
+import { verifyAdminSessionToken } from "@/lib/auth-session";
+
 async function verifyAdmin() {
   const cookieStore = await cookies();
   const session = cookieStore.get("voca_admin_session");
-  return session?.value === "authenticated_admin";
+  return verifyAdminSessionToken(session?.value);
 }
 
 // 1. GET: Ambil seluruh data pendaftar / leads

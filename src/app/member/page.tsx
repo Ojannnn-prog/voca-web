@@ -113,6 +113,10 @@ function MemberPortalContent() {
         ? `/api/member/profile?identifier=${encodeURIComponent(idQuery)}`
         : "/api/member/profile";
       const res = await fetch(url);
+      if (res.status === 401) {
+        router.push("/login?role=member&redirect=/member");
+        return;
+      }
       const data = await res.json();
       if (data.success && data.member) {
         setCurrentMember(data.member);
@@ -126,7 +130,7 @@ function MemberPortalContent() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     let ignore = false;
@@ -136,6 +140,10 @@ function MemberPortalContent() {
           ? `/api/member/profile?identifier=${encodeURIComponent(initialId)}`
           : "/api/member/profile";
         const res = await fetch(url);
+        if (res.status === 401) {
+          router.push("/login?role=member&redirect=/member");
+          return;
+        }
         const data = await res.json();
         if (!ignore) {
           if (data.success && data.member) {
@@ -156,7 +164,7 @@ function MemberPortalContent() {
     return () => {
       ignore = true;
     };
-  }, [initialId]);
+  }, [initialId, router]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

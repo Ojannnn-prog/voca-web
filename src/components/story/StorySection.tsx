@@ -1,6 +1,6 @@
 import React from "react";
 import { CORE_VALUES } from "@/lib/constants";
-import { Calendar, Award, HeartHandshake, Sparkles } from "lucide-react";
+import { Calendar, Award, HeartHandshake } from "lucide-react";
 
 export function StorySection() {
   return (
@@ -81,7 +81,7 @@ export function StorySection() {
         <div id="festival" className="relative rounded-[32px] bg-gradient-to-r from-[#21649D] via-[#1F0066] to-[#0F1D2B] text-white p-8 sm:p-12 overflow-hidden shadow-xl">
           <div className="relative z-10 max-w-2xl space-y-3">
             <div className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-white/90">
-              <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+              <Calendar className="w-3.5 h-3.5 text-amber-300" />
               <span>Agenda Tahunan 10 Oktober</span>
             </div>
             <h3 className="text-2xl sm:text-4xl font-bold tracking-tight">
