@@ -40,7 +40,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative min-h-screen bg-white text-[#111111]">
+    <main className="relative min-h-screen bg-white text-[#111111] pb-20 lg:pb-0">
       {/* 1. Adaptive Sticky Navbar */}
       <Navbar
         onOpenRegister={() => handleOpenRegister("swimming", "free_trial")}
