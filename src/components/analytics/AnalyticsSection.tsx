@@ -13,6 +13,7 @@ if (typeof window !== "undefined") {
 export function AnalyticsSection() {
   const sectionRef = useRef<HTMLElement>(null);
   const [activeLevel, setActiveLevel] = useState("Level 2");
+  const [manualView, setManualView] = useState<"hashtags" | "demographics">("hashtags");
 
   // State angka metrik
   const [metrics, setMetrics] = useState({
@@ -167,15 +168,35 @@ export function AnalyticsSection() {
             {/* VIEW A: Hashtag Kategori Olahraga (Jatuh dengan fisika) */}
             <div
               id="left-card-hashtags"
-              className="w-full h-full flex flex-col justify-between transition-opacity duration-500"
+              className={`w-full h-full flex flex-col justify-between transition-opacity duration-500 ${
+                manualView === "demographics" ? "opacity-0 pointer-events-none" : "opacity-100"
+              }`}
             >
-              <div>
-                <h3 className="text-2xl font-medium text-neutral-900">
-                  Fokus Program & Cabang
-                </h3>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Spektrum aktivitas gerak yang dibina di VOCA
-                </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-medium text-neutral-900">
+                    Fokus Cabang Olahraga
+                  </h3>
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    Spektrum aktivitas gerak yang dibina di VOCA
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualView("demographics");
+                    setTimeout(() => {
+                      const bars = document.querySelectorAll(".demo-bar") as NodeListOf<HTMLElement>;
+                      bars.forEach((bar) => {
+                        const targetWidth = bar.getAttribute("data-width");
+                        if (targetWidth) bar.style.width = targetWidth;
+                      });
+                    }, 50);
+                  }}
+                  className="text-[11px] font-bold text-[#5E17EB] hover:underline px-2.5 py-1 bg-purple-50 rounded-full border border-purple-200"
+                >
+                  Lihat Demografi →
+                </button>
               </div>
 
               <div
@@ -199,15 +220,26 @@ export function AnalyticsSection() {
             {/* VIEW B: Demografi & Fokus Usia Peserta */}
             <div
               id="left-card-demographics"
-              className="absolute inset-6 sm:inset-8 flex flex-col justify-between opacity-0 pointer-events-none transition-opacity duration-500"
+              className={`absolute inset-6 sm:inset-8 flex flex-col justify-between transition-opacity duration-500 ${
+                manualView === "demographics" ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+              }`}
             >
-              <div>
-                <h3 className="text-2xl font-medium text-neutral-900">
-                  Demografi Peserta VOCA
-                </h3>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Distribusi kelompok usia yang mengikuti pembinaan
-                </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-medium text-neutral-900">
+                    Demografi Peserta VOCA
+                  </h3>
+                  <p className="text-xs text-neutral-500 mt-0.5">
+                    Distribusi kelompok usia yang mengikuti pembinaan
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setManualView("hashtags")}
+                  className="text-[11px] font-bold text-[#21649D] hover:underline px-2.5 py-1 bg-blue-50 rounded-full border border-blue-200"
+                >
+                  ← Lihat Cabang
+                </button>
               </div>
 
               <div className="space-y-3.5 my-auto py-3">
