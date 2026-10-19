@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         });
       } else {
         return NextResponse.json(
-          { error: "Username atau password admin salah." },
+          { error: "Username atau password salah." },
           { status: 401 }
         );
       }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
       if (!member || !isValidPassword) {
         return NextResponse.json(
-          { error: `Kredensial salah. Gunakan username format 'membervoca${currentYear}x' dan password 'vocamember${currentYear}'.` },
+          { error: "Username atau password salah." },
           { status: 401 }
         );
       }

@@ -127,7 +127,7 @@ function LoginForm() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder={role === "admin" ? "adminvoca" : "VOCA-2026-089"}
+                placeholder={role === "admin" ? "Masukkan username admin" : "Masukkan nomor anggota / username"}
                 className="w-full pl-10 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#5E17EB]/40 focus:border-[#5E17EB] transition"
               />
               <User className="w-4 h-4 text-neutral-400 absolute left-3.5 top-3.5" />
