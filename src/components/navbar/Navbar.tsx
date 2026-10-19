@@ -22,36 +22,22 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
   const router = useRouter();
   const [scrollY, setScrollY] = useState(0);
   const [activeTab, setActiveTab] = useState<"home" | "programs" | "daftar" | "membership" | "account">("home");
-  const [activeSectionTitle, setActiveSectionTitle] = useState<string>("");
 
-  // Track scroll position & active section across all sections
+  // Track scroll position & active bottom tab
   useEffect(() => {
     const handleScroll = () => {
       const scrollPos = window.scrollY;
       setScrollY(scrollPos);
 
-      const analyticsEl = document.getElementById("analytics-section");
       const programsEl = document.getElementById("programs");
       const membershipEl = document.getElementById("membership");
-      const pathwayEl = document.getElementById("pathway");
-      const aboutEl = document.getElementById("about");
 
-      if (aboutEl && scrollPos >= aboutEl.offsetTop - 260) {
-        setActiveSectionTitle("Tentang VOCA");
-      } else if (pathwayEl && scrollPos >= pathwayEl.offsetTop - 260) {
-        setActiveSectionTitle("Jalur Pembinaan");
-      } else if (membershipEl && scrollPos >= membershipEl.offsetTop - 260) {
+      if (membershipEl && scrollPos >= membershipEl.offsetTop - 260) {
         setActiveTab("membership");
-        setActiveSectionTitle("Biaya & Paket");
       } else if (programsEl && scrollPos >= programsEl.offsetTop - 260) {
         setActiveTab("programs");
-        setActiveSectionTitle("Katalog Program");
-      } else if (analyticsEl && scrollPos >= analyticsEl.offsetTop - 260) {
-        setActiveTab("home");
-        setActiveSectionTitle("Evaluasi & Riset");
       } else {
         setActiveTab("home");
-        setActiveSectionTitle("");
       }
     };
 
@@ -173,14 +159,6 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
               size="sm"
             />
           </Link>
-
-          {/* ACTIVE SECTION BADGE CHIP (PENANDA SECTION YANG SEDANG DILIHAT DI MOBILE) */}
-          {activeSectionTitle && scrollY > 200 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#5E17EB]/10 border border-[#5E17EB]/25 text-[10px] font-bold text-[#5E17EB] animate-fadeIn whitespace-nowrap">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#5E17EB] animate-pulse" />
-              <span>{activeSectionTitle}</span>
-            </div>
-          )}
 
           {/* TOMBOL MASUK DENGAN KONTRAS TINGGI SOLID */}
           <Link
