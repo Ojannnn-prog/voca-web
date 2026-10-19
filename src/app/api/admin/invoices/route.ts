@@ -88,6 +88,7 @@ export async function POST(request: Request) {
         );
       }
 
+      let skippedCount = 0;
       const createdList = [];
 
       for (const m of activeMembers) {
@@ -119,13 +120,25 @@ export async function POST(request: Request) {
             })
             .returning();
           createdList.push(inv);
+        } else {
+          skippedCount++;
         }
+      }
+
+      if (createdList.length === 0) {
+        return NextResponse.json(
+          {
+            error: `Seluruh ${activeMembers.length} anggota aktif sudah memiliki tagihan untuk periode ${monthPeriod || "Oktober 2026"}. Tidak ada tagihan baru yang diterbitkan demi mencegah tagihan ganda (double billing).`,
+          },
+          { status: 400 }
+        );
       }
 
       return NextResponse.json({
         success: true,
         createdCount: createdList.length,
-        message: `Berhasil menerbitkan ${createdList.length} tagihan massal untuk periode ${monthPeriod || "Oktober 2026"} (Batas bayar: ${targetDueDate.toLocaleDateString("id-ID")}).`,
+        skippedCount,
+        message: `Berhasil menerbitkan ${createdList.length} tagihan massal untuk periode ${monthPeriod || "Oktober 2026"}.${skippedCount > 0 ? ` (${skippedCount} anggota aktif dilewati karena sudah memiliki tagihan terbit).` : ""}`,
       });
     } else {
       // MODE 2: Tagihan Khusus Per User Individu
@@ -145,6 +158,27 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Anggota tidak ditemukan." }, { status: 404 });
       }
 
+      // VALIDASI ANTI-DUPLIKASI: Cegah tagihan ganda per member pada bulan yang sama
+      const targetPeriod = monthPeriod || "Oktober 2026";
+      const existingIndividual = await db
+        .select()
+        .from(memberInvoices)
+        .where(
+          and(
+            eq(memberInvoices.memberId, member.memberId),
+            eq(memberInvoices.monthPeriod, targetPeriod)
+          )
+        );
+
+      if (existingIndividual.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Tagihan untuk ${member.fullName} (${member.memberId}) pada periode ${targetPeriod} sudah pernah diterbitkan (${existingIndividual[0].invoiceNumber} - Status: ${existingIndividual[0].status.toUpperCase()}). Tagihan tidak dapat diduplikasi agar orang tua tidak tertagih dua kali. Jika perlu memperbarui, edit tagihan yang ada atau hapus tagihan lama terlebih dahulu via menu admin.`,
+          },
+          { status: 400 }
+        );
+      }
+
       const invoiceNumber = generateInvoiceCode(sequenceCounter);
       const [newInvoice] = await db
         .insert(memberInvoices)
@@ -152,7 +186,7 @@ export async function POST(request: Request) {
           invoiceNumber,
           memberId: member.memberId,
           memberName: member.fullName,
-          monthPeriod: monthPeriod || "Oktober 2026",
+          monthPeriod: targetPeriod,
           amount: parseInt(amount, 10),
           issueDate: new Date(),
           dueDate: targetDueDate,

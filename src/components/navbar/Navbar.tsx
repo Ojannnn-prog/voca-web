@@ -12,10 +12,6 @@ import {
   User,
   Sparkles,
   LogIn,
-  Menu,
-  X,
-  Shield,
-  Layers,
 } from "lucide-react";
 
 interface NavbarProps {
@@ -25,7 +21,6 @@ interface NavbarProps {
 
 export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
   const router = useRouter();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"home" | "programs" | "daftar" | "membership" | "account">("home");
 
   // Track active section on scroll for mobile bottom bar
@@ -122,9 +117,9 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
             })}
           </nav>
 
-          {/* RIGHT ACTIONS: TOMBOL MASUK & TOGGLE DRAWER MOBILE */}
+          {/* RIGHT ACTIONS: TOMBOL MASUK */}
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            {/* Tombol Masuk / Login (Desktop & Tablet) */}
+            {/* Tombol Masuk / Login */}
             <Link
               href="/login"
               className={`inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full transition-all border shrink-0 ${
@@ -137,19 +132,6 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
               <LogIn className="w-3.5 h-3.5 text-[#5E17EB]" />
               <span>Masuk</span>
             </Link>
-
-            {/* Mobile Menu Toggle Button (Buka Drawer Menu Lengkap) */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`lg:hidden p-2 sm:p-2.5 rounded-full border transition-all shrink-0 ${
-                isDarkMode
-                  ? "text-white bg-white/10 border-white/20"
-                  : "text-neutral-800 bg-white border-neutral-200 shadow-sm"
-              }`}
-              aria-label="Buka Menu Lengkap"
-            >
-              {mobileMenuOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Menu className="w-4 h-4 sm:w-5 sm:h-5" />}
-            </button>
           </div>
         </div>
       </header>
@@ -317,85 +299,6 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
           </button>
         </div>
       </nav>
-
-      {/* ========================================================================= */}
-      {/* 3. MOBILE SECONDARY DRAWER (UNTUK HALAMAN TAMBAHAN: TENTANG, JALUR, FESTIVAL) */}
-      {/* ========================================================================= */}
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-white/98 backdrop-blur-xl pt-20 px-6 flex flex-col justify-between pb-24 lg:hidden animate-fadeIn overflow-y-auto">
-          {/* Main Links */}
-          <div className="flex flex-col space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-2">
-              Menu Lengkap VOCA
-            </p>
-            {NAV_LINKS.map((item) => {
-              const isRegistration = item.href === "#pendaftaran" || item.isSpecial;
-              return (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  onClick={(e) => {
-                    setMobileMenuOpen(false);
-                    if (isRegistration) {
-                      e.preventDefault();
-                      onOpenRegister();
-                    }
-                  }}
-                  className={`text-base font-bold py-2.5 border-b border-neutral-100 flex items-center justify-between ${
-                    isRegistration ? "text-[#5E17EB]" : "text-neutral-900 hover:text-[#5E17EB]"
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  {isRegistration && (
-                    <span className="text-xs font-semibold px-2.5 py-0.5 bg-purple-50 text-[#5E17EB] rounded-full border border-purple-200">
-                      Trial Gratis
-                    </span>
-                  )}
-                </a>
-              );
-            })}
-
-            {/* Quick Access Portal Login */}
-            <div className="pt-4 space-y-2">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
-                Akses Portal & Akun
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Link
-                  href="/login?role=member"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-blue-50 text-[#21649D] font-bold text-xs border border-blue-200 active:scale-95 transition"
-                >
-                  <User className="w-4 h-4" />
-                  <span>Portal Member</span>
-                </Link>
-                <Link
-                  href="/login?role=admin"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-purple-50 text-[#5E17EB] font-bold text-xs border border-purple-200 active:scale-95 transition"
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>Panel Admin</span>
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* CTA Daftar Khusus Mobile Drawer */}
-          <div className="pt-6">
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onOpenRegister();
-              }}
-              className="w-full py-3.5 rounded-full bg-[#5E17EB] hover:bg-[#4b11bd] text-white font-bold text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center gap-2 active:scale-95 transition"
-            >
-              <Sparkles className="w-4 h-4 text-yellow-300" />
-              <span>Daftar Trial Class Sekarang</span>
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }

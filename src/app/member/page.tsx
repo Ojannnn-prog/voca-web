@@ -174,14 +174,49 @@ function MemberPortalContent() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setUploadErrorMsg("Ukuran file maksimal 5MB.");
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadErrorMsg("Ukuran file terlalu besar (maksimal 10MB).");
         return;
       }
+
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setUploadFilePreview(reader.result as string);
-        setUploadErrorMsg("");
+      reader.onload = (event) => {
+        const img = document.createElement("img");
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          // Kompresi Canvas: Maks 1080px, quality 0.75 (Hemat storage hingga 95%)
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1080;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL("image/jpeg", 0.75);
+            setUploadFilePreview(compressed);
+            setUploadErrorMsg("");
+          } else {
+            setUploadFilePreview(event.target?.result as string);
+            setUploadErrorMsg("");
+          }
+        };
+        img.onerror = () => {
+          setUploadFilePreview(event.target?.result as string);
+          setUploadErrorMsg("");
+        };
       };
       reader.readAsDataURL(file);
     }

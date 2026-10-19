@@ -40,9 +40,41 @@ import {
   CheckCheck,
   Edit2,
   Edit3,
-  Info,
   AlertTriangle,
+  Printer,
+  Download,
+  Info,
 } from "lucide-react";
+import {
+  exportFinancialReportPdf,
+  exportMembersReportPdf,
+  exportStaffReportPdf,
+} from "@/lib/pdf-report-generator";
+
+// Konstanta Periode Bulan dan Tahun untuk Dropdown Otomatis
+const MONTH_NAMES = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+];
+
+const YEAR_OPTIONS = [2025, 2026, 2027, 2028, 2029, 2030];
+
+function parseMonthPeriod(periodStr: string) {
+  const parts = (periodStr || "").trim().split(" ");
+  const month = MONTH_NAMES.includes(parts[0]) ? parts[0] : "Oktober";
+  const year = parts[1] || "2026";
+  return { month, year };
+}
 
 interface Lead {
   id: number;
@@ -169,6 +201,13 @@ export default function AdminDashboardPage() {
   const [memberSearch, setMemberSearch] = useState("");
   const [invoiceFilter, setInvoiceFilter] = useState("all");
   const [financeFilter, setFinanceFilter] = useState("all");
+
+  // Filter Periode Kustom Kas & Keuangan (Harian, Bulanan, Semester, Tahunan)
+  const [financePeriodMode, setFinancePeriodMode] = useState<"all" | "daily" | "monthly" | "semester" | "yearly">("all");
+  const [financeFilterDate, setFinanceFilterDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [financeFilterMonth, setFinanceFilterMonth] = useState<string>("Oktober");
+  const [financeFilterYear, setFinanceFilterYear] = useState<string>("2026");
+  const [financeFilterSemester, setFinanceFilterSemester] = useState<"1" | "2">("2");
 
   // ================= NOTIFICATION TOAST & CONFIRM MODAL STATES =================
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -948,17 +987,6 @@ export default function AdminDashboardPage() {
     router.refresh();
   };
 
-  if (isAuthenticated === null) {
-    return (
-      <div className="min-h-screen bg-[#0A0D14] text-white flex flex-col items-center justify-center space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin text-[#5E17EB]" />
-        <p className="text-sm font-medium text-neutral-400">
-          Memeriksa hak akses administrator VOCA...
-        </p>
-      </div>
-    );
-  }
-
   // Filtered Leads
   const filteredLeads = leads.filter((l) => {
     if (leadFilter === "pending") return l.status === "pending";
@@ -987,16 +1015,146 @@ export default function AdminDashboardPage() {
     return true;
   });
 
-  // Filtered Finance Transactions
+  // Filtered Finance Transactions (Tipe & Periode Kustom)
   const filteredTransactions = transactions.filter((t) => {
-    if (financeFilter === "income") return t.type === "income";
-    if (financeFilter === "expense") return t.type === "expense";
+    // 1. Filter Tipe (income/expense)
+    if (financeFilter === "income" && t.type !== "income") return false;
+    if (financeFilter === "expense" && t.type !== "expense") return false;
+
+    // 2. Filter Periode Kustom (Harian, Bulanan, Semester, Tahunan)
+    if (financePeriodMode === "all") return true;
+
+    const tDate = new Date(t.transactionDate);
+    const tYear = tDate.getFullYear().toString();
+    const tMonthIndex = tDate.getMonth();
+    const tMonthName = MONTH_NAMES[tMonthIndex];
+
+    if (financePeriodMode === "daily") {
+      const dateStr = tDate.toISOString().split("T")[0];
+      return dateStr === financeFilterDate;
+    }
+
+    if (financePeriodMode === "monthly") {
+      return tMonthName === financeFilterMonth && tYear === financeFilterYear;
+    }
+
+    if (financePeriodMode === "semester") {
+      if (tYear !== financeFilterYear) return false;
+      if (financeFilterSemester === "1") {
+        return tMonthIndex >= 0 && tMonthIndex <= 5;
+      } else {
+        return tMonthIndex >= 6 && tMonthIndex <= 11;
+      }
+    }
+
+    if (financePeriodMode === "yearly") {
+      return tYear === financeFilterYear;
+    }
+
     return true;
   });
+
+  // Dynamic Finance Summary untuk periode terpilih
+  const dynamicFinanceSummary = React.useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    for (const trx of filteredTransactions) {
+      if (trx.type === "income") income += trx.amount;
+      else if (trx.type === "expense") expense += trx.amount;
+    }
+    return {
+      totalIncome: income,
+      totalExpense: expense,
+      currentBalance: income - expense,
+      count: filteredTransactions.length,
+    };
+  }, [filteredTransactions]);
+
+  // Label Keterangan Periode Terpilih
+  const currentPeriodLabel = React.useMemo(() => {
+    if (financePeriodMode === "daily") {
+      return `Harian (${new Date(financeFilterDate).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })})`;
+    }
+    if (financePeriodMode === "monthly") {
+      return `Bulan ${financeFilterMonth} ${financeFilterYear}`;
+    }
+    if (financePeriodMode === "semester") {
+      return `Semester ${financeFilterSemester} Tahun ${financeFilterYear}`;
+    }
+    if (financePeriodMode === "yearly") {
+      return `Tahun ${financeFilterYear}`;
+    }
+    return "Seluruh Riwayat Kas";
+  }, [
+    financePeriodMode,
+    financeFilterDate,
+    financeFilterMonth,
+    financeFilterYear,
+    financeFilterSemester,
+  ]);
+
+  // Perhitungan Saldo Berjalan (Running Balance) untuk setiap transaksi
+  const transactionsWithRunningBalance = React.useMemo(() => {
+    const sorted = [...filteredTransactions].sort(
+      (a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime()
+    );
+    let balance = 0;
+    const balanceMap = new Map<number, number>();
+    for (const t of sorted) {
+      if (t.type === "income") balance += t.amount;
+      else balance -= t.amount;
+      balanceMap.set(t.id, balance);
+    }
+    return balanceMap;
+  }, [filteredTransactions]);
+
+  // Handler Export PDF Laporan Keuangan
+  const handleExportFinancePdf = () => {
+    exportFinancialReportPdf({
+      transactions: filteredTransactions,
+      periodTitle: currentPeriodLabel,
+      summary: dynamicFinanceSummary,
+      printedBy: "adminvoca",
+    });
+    showToast("success", "Export PDF Siap", "Laporan audit kas & keuangan siap dicetak atau disimpan sebagai PDF.");
+  };
+
+  // Handler Export PDF Laporan Anggota
+  const handleExportMembersPdf = () => {
+    exportMembersReportPdf({
+      members: membersList,
+      printedBy: "adminvoca",
+    });
+    showToast("success", "Export PDF Siap", "Laporan biodata seluruh anggota siap dicetak.");
+  };
+
+  // Handler Export PDF Laporan Staf/Pelatih
+  const handleExportStaffPdf = () => {
+    exportStaffReportPdf({
+      users: systemUsersList,
+      printedBy: "adminvoca",
+    });
+    showToast("success", "Export PDF Siap", "Laporan staf & pelatih siap dicetak.");
+  };
 
   const pendingLeadsCount = leads.filter((l) => l.status === "pending").length;
   const activeMembersCount = membersList.filter((m) => m.status === "active").length;
   const pendingInvoicesCount = invoices.filter((i) => i.status === "pending").length;
+
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-[#0A0D14] text-white flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-[#5E17EB]" />
+        <p className="text-sm font-medium text-neutral-400">
+          Memeriksa hak akses administrator VOCA...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-neutral-900 flex flex-col md:flex-row relative">
@@ -1202,15 +1360,25 @@ export default function AdminDashboardPage() {
               </button>
             )}
 
-            {/* Tombol Tambah Anggota Manual */}
+            {/* Tombol Tambah Anggota & Export PDF */}
             {activeTab === "members" && (
-              <button
-                onClick={() => setIsAddMemberOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md shadow-purple-500/20 transition active:scale-95"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Anggota Baru</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportMembersPdf}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-bold transition shadow-sm active:scale-95"
+                  title="Cetak Laporan Biodata & Kategori Anggota (A4 PDF)"
+                >
+                  <Printer className="w-3.5 h-3.5 text-[#5E17EB]" />
+                  <span>Export PDF Anggota</span>
+                </button>
+                <button
+                  onClick={() => setIsAddMemberOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md shadow-purple-500/20 transition active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Anggota Baru</span>
+                </button>
+              </div>
             )}
 
             {/* Tombol Tagihan */}
@@ -1233,9 +1401,17 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* Tombol Keuangan */}
+            {/* Tombol Keuangan & Export PDF */}
             {activeTab === "finance" && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleExportFinancePdf}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-bold transition shadow-sm active:scale-95"
+                  title="Cetak Laporan Keuangan Resmi (Sesuai Periode Filter)"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Export PDF Laporan Kas</span>
+                </button>
                 <button
                   onClick={() => {
                     setFinanceModalType("income");
@@ -1259,15 +1435,25 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
-            {/* Tombol User Staf */}
+            {/* Tombol User Staf & Export PDF */}
             {activeTab === "users" && (
-              <button
-                onClick={() => setIsAddUserOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md transition active:scale-95"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Staf / Pelatih</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportStaffPdf}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-bold transition shadow-sm active:scale-95"
+                  title="Cetak Daftar Pengguna & Staf Resmi"
+                >
+                  <Printer className="w-3.5 h-3.5 text-[#5E17EB]" />
+                  <span>Export PDF Staf</span>
+                </button>
+                <button
+                  onClick={() => setIsAddUserOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md transition active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Staf / Pelatih</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -2016,13 +2202,13 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-[24px] border border-neutral-200/80 shadow-sm">
                 <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 block mb-1">
-                  Saldo Kas Bersih VOCA
+                  Saldo Kas Bersih ({currentPeriodLabel})
                 </span>
-                <p className="text-3xl font-extrabold text-emerald-600">
-                  Rp {financeSummary.currentBalance.toLocaleString("id-ID")}
+                <p className={`text-3xl font-extrabold ${dynamicFinanceSummary.currentBalance >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                  Rp {dynamicFinanceSummary.currentBalance.toLocaleString("id-ID")}
                 </p>
                 <p className="text-[11px] text-neutral-500 mt-1">
-                  Total Pemasukan dikurangi Pengeluaran
+                  Kumulatif Kas VOCA: <strong>Rp {financeSummary.currentBalance.toLocaleString("id-ID")}</strong>
                 </p>
               </div>
 
@@ -2034,9 +2220,11 @@ export default function AdminDashboardPage() {
                   <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
                 </div>
                 <p className="text-3xl font-extrabold text-neutral-900">
-                  Rp {financeSummary.totalIncome.toLocaleString("id-ID")}
+                  Rp {dynamicFinanceSummary.totalIncome.toLocaleString("id-ID")}
                 </p>
-                <p className="text-[11px] text-neutral-500 mt-1">Iuran member & pendaftaran baru</p>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  {currentPeriodLabel} • {filteredTransactions.filter(t => t.type === "income").length} transaksi
+                </p>
               </div>
 
               <div className="bg-white p-6 rounded-[24px] border border-neutral-200/80 shadow-sm">
@@ -2047,15 +2235,141 @@ export default function AdminDashboardPage() {
                   <ArrowUpRight className="w-4 h-4 text-rose-600" />
                 </div>
                 <p className="text-3xl font-extrabold text-rose-600">
-                  Rp {financeSummary.totalExpense.toLocaleString("id-ID")}
+                  Rp {dynamicFinanceSummary.totalExpense.toLocaleString("id-ID")}
                 </p>
-                <p className="text-[11px] text-neutral-500 mt-1">Sewa venue, honor pelatih, alat</p>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  {currentPeriodLabel} • {filteredTransactions.filter(t => t.type === "expense").length} transaksi
+                </p>
               </div>
             </div>
 
-            {/* Filter & Transactions Table */}
+            {/* Filter Periode Kustom & Export Controls */}
+            <div className="bg-white p-5 rounded-[24px] border border-neutral-200/80 shadow-sm space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                {/* Mode Periode Buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold text-neutral-700 mr-1">Periode Laporan:</span>
+                  {[
+                    { id: "all", label: "Semua" },
+                    { id: "daily", label: "Harian" },
+                    { id: "monthly", label: "Bulanan" },
+                    { id: "semester", label: "Semester" },
+                    { id: "yearly", label: "Tahunan" },
+                  ].map((mode) => (
+                    <button
+                      key={mode.id}
+                      onClick={() => {
+                        setFinancePeriodMode(mode.id as any);
+                        showToast("info", "Filter Periode", `Mode laporan kas diubah: ${mode.label}`);
+                      }}
+                      className={`text-xs px-3.5 py-1.5 rounded-full font-bold transition ${
+                        financePeriodMode === mode.id
+                          ? "bg-[#5E17EB] text-white shadow-sm"
+                          : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                      }`}
+                    >
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tombol Cetak PDF Berdasarkan Filter Terpilih */}
+                <button
+                  onClick={handleExportFinancePdf}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-sm transition active:scale-95 shrink-0"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Cetak PDF Laporan Kas ({currentPeriodLabel})</span>
+                </button>
+              </div>
+
+              {/* Sub-Controls Dinamis berdasarkan Mode Periode */}
+              {financePeriodMode !== "all" && (
+                <div className="pt-3 border-t border-neutral-100 flex items-center gap-3 flex-wrap text-xs animate-fadeIn bg-neutral-50/80 p-3 rounded-xl border border-neutral-200/60">
+                  {financePeriodMode === "daily" && (
+                    <div className="flex items-center gap-2">
+                      <label className="font-bold text-neutral-700">Pilih Tanggal:</label>
+                      <input
+                        type="date"
+                        value={financeFilterDate}
+                        onChange={(e) => setFinanceFilterDate(e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg font-mono text-xs"
+                      />
+                    </div>
+                  )}
+
+                  {financePeriodMode === "monthly" && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <label className="font-bold text-neutral-700">Pilih Bulan & Tahun:</label>
+                      <select
+                        value={financeFilterMonth}
+                        onChange={(e) => setFinanceFilterMonth(e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium"
+                      >
+                        {MONTH_NAMES.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={financeFilterYear}
+                        onChange={(e) => setFinanceFilterYear(e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium"
+                      >
+                        {YEAR_OPTIONS.map((y) => (
+                          <option key={y} value={String(y)}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {financePeriodMode === "semester" && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <label className="font-bold text-neutral-700">Pilih Semester & Tahun:</label>
+                      <select
+                        value={financeFilterSemester}
+                        onChange={(e) => setFinanceFilterSemester(e.target.value as any)}
+                        className="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium"
+                      >
+                        <option value="1">Semester 1 (Januari - Juni)</option>
+                        <option value="2">Semester 2 (Juli - Desember)</option>
+                      </select>
+                      <select
+                        value={financeFilterYear}
+                        onChange={(e) => setFinanceFilterYear(e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium"
+                      >
+                        {YEAR_OPTIONS.map((y) => (
+                          <option key={y} value={String(y)}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {financePeriodMode === "yearly" && (
+                    <div className="flex items-center gap-2">
+                      <label className="font-bold text-neutral-700">Pilih Tahun Anggaran:</label>
+                      <select
+                        value={financeFilterYear}
+                        onChange={(e) => setFinanceFilterYear(e.target.value)}
+                        className="px-3 py-1.5 bg-white border border-neutral-200 rounded-lg text-xs font-medium"
+                      >
+                        {YEAR_OPTIONS.map((y) => (
+                          <option key={y} value={String(y)}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <span className="text-[11px] text-purple-700 font-semibold ml-auto">
+                    Menampilkan arsip audit kas: <strong>{currentPeriodLabel}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Filter Tipe Transaksi & Transactions Table */}
             <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden">
-              <div className="p-4 sm:p-5 border-b border-neutral-100 flex items-center justify-between">
+              <div className="p-4 sm:p-5 border-b border-neutral-100 flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-1.5">
                   {[
                     { id: "all", label: "Semua Transaksi" },
@@ -2078,8 +2392,8 @@ export default function AdminDashboardPage() {
                     </button>
                   ))}
                 </div>
-                <span className="text-xs text-neutral-400 font-medium">
-                  {filteredTransactions.length} transaksi tercatat
+                <span className="text-xs text-neutral-500 font-medium">
+                  {filteredTransactions.length} transaksi tercatat pada {currentPeriodLabel}
                 </span>
               </div>
 
@@ -2087,83 +2401,101 @@ export default function AdminDashboardPage() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-neutral-50/80 text-neutral-500 font-bold border-b border-neutral-200/80">
-                      <th className="py-3.5 px-4">Kode Transaksi</th>
-                      <th className="py-3.5 px-4">Tanggal</th>
-                      <th className="py-3.5 px-4">Tipe</th>
-                      <th className="py-3.5 px-4">Kategori & Keterangan</th>
-                      <th className="py-3.5 px-4">Metode Bayar</th>
-                      <th className="py-3.5 px-4 text-right">Nominal</th>
-                      <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
+                      <th className="py-3.5 px-3 text-center">No</th>
+                      <th className="py-3.5 px-3">Kode Transaksi</th>
+                      <th className="py-3.5 px-3">Tanggal</th>
+                      <th className="py-3.5 px-3">Tipe Arus</th>
+                      <th className="py-3.5 px-4 min-w-[260px]">
+                        Rincian Penggunaan (&quot;Dipergunakan Untuk Apa &amp; Bagaimana&quot;)
+                      </th>
+                      <th className="py-3.5 px-3">Metode Bayar</th>
+                      <th className="py-3.5 px-3 text-right">Nominal Mutasi</th>
+                      <th className="py-3.5 px-3 text-right">Saldo Berjalan</th>
+                      <th className="py-3.5 px-3 text-center">Aksi (CRUD)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 font-medium">
-                    {filteredTransactions.map((trx) => (
-                      <tr key={trx.id} className="hover:bg-neutral-50/80 transition">
-                        <td className="py-3.5 px-4 font-mono font-bold text-neutral-800">
-                          {trx.transactionCode}
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-neutral-500">
-                          {new Date(trx.transactionDate).toLocaleDateString("id-ID", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              trx.type === "income"
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-rose-100 text-rose-700"
+                    {filteredTransactions.map((trx, idx) => {
+                      const runningBal = transactionsWithRunningBalance.get(trx.id) ?? 0;
+                      return (
+                        <tr key={trx.id} className="hover:bg-neutral-50/80 transition">
+                          <td className="py-3.5 px-3 text-center text-neutral-400 font-mono">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3.5 px-3 font-mono font-bold text-neutral-800">
+                            {trx.transactionCode}
+                          </td>
+                          <td className="py-3.5 px-3 font-mono text-neutral-500 whitespace-nowrap">
+                            {new Date(trx.transactionDate).toLocaleDateString("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </td>
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                trx.type === "income"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-rose-100 text-rose-700"
+                              }`}
+                            >
+                              {trx.type === "income" ? "Pemasukan" : "Pengeluaran"}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <p className="font-bold text-neutral-900 leading-snug">{trx.description}</p>
+                            <p className="text-[11px] text-neutral-500 mt-0.5">
+                              <span className="font-semibold text-neutral-700">{trx.category}</span>
+                              {trx.memberId && (
+                                <span className="ml-1.5 font-mono text-[#5E17EB] bg-purple-50 px-1 py-0.2 rounded">
+                                  Ref ID: {trx.memberId}
+                                </span>
+                              )}
+                            </p>
+                          </td>
+                          <td className="py-3.5 px-3 text-neutral-600 font-medium whitespace-nowrap">
+                            {trx.paymentMethod}
+                          </td>
+                          <td
+                            className={`py-3.5 px-3 text-right font-extrabold text-xs whitespace-nowrap ${
+                              trx.type === "income" ? "text-emerald-600" : "text-rose-600"
                             }`}
                           >
-                            {trx.type === "income" ? "Pemasukan" : "Pengeluaran"}
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <p className="font-bold text-neutral-900">{trx.description}</p>
-                          <p className="text-[11px] text-neutral-500">
-                            {trx.category} {trx.memberId && `• Ref ID: ${trx.memberId}`}
-                          </p>
-                        </td>
-                        <td className="py-3.5 px-4 text-neutral-600 font-medium">
-                          {trx.paymentMethod}
-                        </td>
-                        <td
-                          className={`py-3.5 px-4 text-right font-extrabold text-sm ${
-                            trx.type === "income" ? "text-emerald-600" : "text-rose-600"
-                          }`}
-                        >
-                          {trx.type === "income" ? "+" : "-"} Rp{" "}
-                          {trx.amount.toLocaleString("id-ID")}
-                        </td>
-                        <td className="py-3.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {/* Edit Transaksi Kas */}
-                            <button
-                              onClick={() => setEditingFinance(trx)}
-                              className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
-                              title="Edit Transaksi Kas"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                            {trx.type === "income" ? "+" : "-"} Rp{" "}
+                            {trx.amount.toLocaleString("id-ID")}
+                          </td>
+                          <td className="py-3.5 px-3 text-right font-extrabold text-xs text-neutral-900 bg-neutral-50/50 whitespace-nowrap">
+                            Rp {runningBal.toLocaleString("id-ID")}
+                          </td>
+                          <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Edit Transaksi Kas */}
+                              <button
+                                onClick={() => setEditingFinance(trx)}
+                                className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                                title="Edit Transaksi Kas"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
 
-                            {/* Hapus Transaksi Kas */}
-                            <button
-                              onClick={() => handleDeleteFinance(trx.id, trx.transactionCode)}
-                              className="p-1 text-neutral-400 hover:text-red-600 transition"
-                              title="Hapus transaksi"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                              {/* Hapus Transaksi Kas */}
+                              <button
+                                onClick={() => handleDeleteFinance(trx.id, trx.transactionCode)}
+                                className="p-1 text-neutral-400 hover:text-red-600 transition"
+                                title="Hapus transaksi"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {filteredTransactions.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="py-8 text-center text-neutral-400">
-                          Belum ada transaksi pada kategori ini.
+                        <td colSpan={9} className="py-8 text-center text-neutral-400">
+                          Belum ada transaksi pada kategori dan periode ini.
                         </td>
                       </tr>
                     )}
@@ -2585,14 +2917,33 @@ export default function AdminDashboardPage() {
 
             <form onSubmit={handleUpdateInvoiceDetails} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-neutral-700 mb-1">Periode Bulan *</label>
-                <input
-                  type="text"
-                  required
-                  value={editingInvoice.monthPeriod}
-                  onChange={(e) => setEditingInvoice({ ...editingInvoice, monthPeriod: e.target.value })}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
-                />
+                <label className="block font-bold text-neutral-700 mb-1">Periode Bulan & Tahun *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={parseMonthPeriod(editingInvoice.monthPeriod).month}
+                    onChange={(e) => {
+                      const { year } = parseMonthPeriod(editingInvoice.monthPeriod);
+                      setEditingInvoice({ ...editingInvoice, monthPeriod: `${e.target.value} ${year}` });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  >
+                    {MONTH_NAMES.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={parseMonthPeriod(editingInvoice.monthPeriod).year}
+                    onChange={(e) => {
+                      const { month } = parseMonthPeriod(editingInvoice.monthPeriod);
+                      setEditingInvoice({ ...editingInvoice, monthPeriod: `${month} ${e.target.value}` });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  >
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -2923,15 +3274,33 @@ export default function AdminDashboardPage() {
               </p>
 
               <div>
-                <label className="block font-bold text-neutral-700 mb-1">Periode Bulan *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Oktober 2026 atau November 2026"
-                  value={bulkInvoiceForm.monthPeriod}
-                  onChange={(e) => setBulkInvoiceForm({ ...bulkInvoiceForm, monthPeriod: e.target.value })}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
-                />
+                <label className="block font-bold text-neutral-700 mb-1">Periode Bulan & Tahun *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={parseMonthPeriod(bulkInvoiceForm.monthPeriod).month}
+                    onChange={(e) => {
+                      const { year } = parseMonthPeriod(bulkInvoiceForm.monthPeriod);
+                      setBulkInvoiceForm({ ...bulkInvoiceForm, monthPeriod: `${e.target.value} ${year}` });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  >
+                    {MONTH_NAMES.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={parseMonthPeriod(bulkInvoiceForm.monthPeriod).year}
+                    onChange={(e) => {
+                      const { month } = parseMonthPeriod(bulkInvoiceForm.monthPeriod);
+                      setBulkInvoiceForm({ ...bulkInvoiceForm, monthPeriod: `${month} ${e.target.value}` });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  >
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -3021,17 +3390,37 @@ export default function AdminDashboardPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-700 mb-1">Periode Bulan *</label>
-                  <input
-                    type="text"
-                    required
-                    value={singleInvoiceForm.monthPeriod}
-                    onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, monthPeriod: e.target.value })}
-                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
-                  />
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Periode Bulan & Tahun *</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={parseMonthPeriod(singleInvoiceForm.monthPeriod).month}
+                    onChange={(e) => {
+                      const { year } = parseMonthPeriod(singleInvoiceForm.monthPeriod);
+                      setSingleInvoiceForm({ ...singleInvoiceForm, monthPeriod: `${e.target.value} ${year}` });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  >
+                    {MONTH_NAMES.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={parseMonthPeriod(singleInvoiceForm.monthPeriod).year}
+                    onChange={(e) => {
+                      const { month } = parseMonthPeriod(singleInvoiceForm.monthPeriod);
+                      setSingleInvoiceForm({ ...singleInvoiceForm, monthPeriod: `${month} ${e.target.value}` });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  >
+                    {YEAR_OPTIONS.map((y) => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-neutral-700 mb-1">Nominal (Rp) *</label>
                   <input
@@ -3042,19 +3431,18 @@ export default function AdminDashboardPage() {
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-neutral-700 mb-1">Batas Bayar (Hari dari sekarang)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="30"
-                  required
-                  value={singleInvoiceForm.daysUntilDue}
-                  onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, daysUntilDue: e.target.value })}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
-                />
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Batas Bayar (Hari) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="30"
+                    required
+                    value={singleInvoiceForm.daysUntilDue}
+                    onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, daysUntilDue: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
               </div>
 
               <div>

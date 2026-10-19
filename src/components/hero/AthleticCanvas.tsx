@@ -14,20 +14,20 @@ export function AthleticCanvas() {
         className="w-full h-full"
       >
         {/* Garis Orbit & Lintasan Tipis (Swimming Lanes & Running Tracks) */}
-        <circle cx="480" cy="250" r="190" stroke="#ffffff" strokeOpacity="0.35" strokeWidth="1.5" />
-        <circle cx="480" cy="250" r="150" stroke="#ffffff" strokeOpacity="0.2" strokeWidth="1" />
+        <circle cx="720" cy="260" r="190" stroke="#ffffff" strokeOpacity="0.35" strokeWidth="1.5" />
+        <circle cx="720" cy="260" r="150" stroke="#ffffff" strokeOpacity="0.2" strokeWidth="1" />
         <path d="M 180 780 Q 650 580 1180 980" stroke="#ffffff" strokeOpacity="0.3" strokeWidth="2" fill="none" />
         <path d="M 300 1650 Q 750 1850 1200 1700" stroke="#ffffff" strokeOpacity="0.4" strokeWidth="2" fill="none" />
 
         {/* ================= SCENE 1: AKUATIK & PENGALAMAN AWAL (SWIMMING ACADEMY) ================= */}
-        {/* Bola Biru & Orbit Energi Air */}
-        <circle cx="490" cy="250" r="95" fill="#5E2BFF" stroke="#ffffff" strokeWidth="1.5" />
-        <circle cx="515" cy="255" r="58" fill="url(#blueSphereGrad)" />
-        <path d="M475 225 L485 205 L500 220 Z" fill="#2A0875" />
-        <path d="M515 220 L530 205 L535 225 Z" fill="#2A0875" />
+        {/* Bola Biru & Orbit Energi Air (Tengah Seimbang Tanpa Terpotong) */}
+        <circle cx="720" cy="260" r="95" fill="#5E2BFF" stroke="#ffffff" strokeWidth="1.5" />
+        <circle cx="740" cy="265" r="58" fill="url(#blueSphereGrad)" />
+        <path d="M700 235 L710 215 L725 230 Z" fill="#2A0875" />
+        <path d="M740 230 L755 215 L760 235 Z" fill="#2A0875" />
 
         {/* Hati 3D Pink-Kuning Besar (Semangat & Passion Olahraga) */}
-        <g transform="translate(830, 75) rotate(12)">
+        <g transform="translate(940, 75) rotate(12)">
           <path
             d="M140 60 C140 20 195 0 230 35 C265 0 320 20 320 60 C320 130 230 185 230 235 C230 185 140 130 140 60 Z"
             fill="#FFA800"
