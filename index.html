@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wollo - Maximize Your Social Media Presence</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & Fredoka -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- GSAP & ScrollTrigger -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #ffffff;
+      color: #111111;
+      overflow-x: hidden;
+      margin: 0;
+      padding: 0;
+    }
+
+    .logo-font {
+      font-family: 'Fredoka', sans-serif;
+      letter-spacing: -0.03em;
+    }
+
+    /* Tekstur Noise / Grainy pada Ilustrasi */
+    .noise-bg {
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.14'/%3E%3C/svg%3E");
+    }
+
+    /* Transisi Navbar Adaptive */
+    #navbar, #nav-pill, #nav-logo, #nav-login, #nav-cta {
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* State saat Navbar berada di atas background ungu gelap */
+    .nav-dark-mode #nav-logo {
+      color: #FF4D8D !important;
+    }
+    .nav-dark-mode #nav-pill {
+      background-color: #ffffff;
+      padding: 0.65rem 1.85rem;
+      border-radius: 9999px;
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.2);
+    }
+    .nav-dark-mode #nav-login {
+      color: #ffffff !important;
+    }
+    .nav-dark-mode #nav-cta {
+      background-color: #ffffff !important;
+      color: #111111 !important;
+      border: 1.5px solid #111111 !important;
+    }
+
+    /* Kapsul Hashtag */
+    .hashtag-pill {
+      position: absolute;
+      padding: 0.45rem 1.1rem;
+      border-radius: 9999px;
+      border: 1.5px solid #222222;
+      background: #ffffff;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #111111;
+      white-space: nowrap;
+      user-select: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+      transform-origin: center;
+    }
+
+    /* Animasi Bar Demographics */
+    .demo-bar {
+      width: 0%;
+      transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+  </style>
+</head>
+<body class="antialiased selection:bg-[#5E17EB] selection:text-white">
+
+  <!-- ================= NAVBAR ================= -->
+  <header id="navbar" class="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 md:px-16 py-5">
+    <!-- Logo -->
+    <a href="#" id="nav-logo" class="logo-font text-3xl font-bold text-black tracking-tight flex items-center">
+      w<span class="inline-block transform scale-y-90">o</span>llo
+    </a>
+
+    <!-- Center Links -->
+    <nav id="nav-pill" class="hidden md:flex items-center space-x-8 text-sm font-medium text-neutral-700">
+      <a href="#features" class="hover:text-black transition">Features</a>
+      <a href="#integrations" class="hover:text-black transition">Integrations</a>
+      <a href="#pricing" class="hover:text-black transition">Pricing</a>
+      <a href="#about" class="hover:text-black transition">About us</a>
+      <a href="#contact" class="hover:text-black transition">Contact</a>
+    </nav>
+
+    <!-- Right Actions -->
+    <div class="flex items-center space-x-6">
+      <a href="#login" id="nav-login" class="text-sm font-medium text-neutral-800 hover:opacity-75">Log In</a>
+      <a href="#trial" id="nav-cta" class="bg-[#111111] text-white text-sm font-medium px-5 py-2.5 rounded-full border border-transparent hover:opacity-90">
+        Start Free Trial
+      </a>
+    </div>
+  </header>
+
+  <!-- ================= HERO & SCROLL SHOWCASE WRAPPER ================= -->
+  <!-- Menggunakan position relative & h-screen agar elemen di dalamnya bisa diatur dengan koordinat absolut yang presisi -->
+  <div id="scroll-wrapper" class="relative w-full h-screen overflow-hidden bg-white">
+    
+    <!-- HERO TEXT & CTA (Berada di posisi absolut atas) -->
+    <div id="hero-content" class="absolute top-[130px] left-1/2 -translate-x-1/2 text-center z-20 w-full max-w-2xl px-4">
+      <h1 class="text-5xl md:text-[3.65rem] font-medium tracking-tight text-neutral-900 leading-[1.12] mb-8">
+        Maximize Your Social<br>Media Presence
+      </h1>
+      <div class="flex items-center justify-center space-x-4">
+        <button class="bg-[#5E17EB] hover:bg-[#4b11bd] text-white text-sm font-medium px-6 py-3.5 rounded-full transition shadow-md">
+          Start Free Trial
+        </button>
+        <button class="bg-white hover:bg-neutral-50 text-neutral-800 text-sm font-medium px-6 py-3.5 rounded-full border border-neutral-300 transition">
+          Create Free Account
+        </button>
+      </div>
+    </div>
+
+    <!-- STACKED CARDS & ILLUSTRATION CANVAS -->
+    <!-- Posisi awal top: 410px agar mengintip di bagian bawah layar, lalu dianimasikan ke top: 0px & height: 100vh -->
+    <div id="card-stage" class="absolute top-[410px] left-1/2 -translate-x-1/2 w-[88vw] max-w-[1180px] h-[75vh] z-10">
+      
+      <!-- Back Yellow Card -->
+      <div id="back-card-yellow" class="absolute inset-0 bg-[#FFC700] rounded-[36px] transform -rotate-[4.2deg] -translate-y-6 translate-x-2 scale-[0.96] z-0"></div>
+      
+      <!-- Middle Pink Card -->
+      <div id="back-card-pink" class="absolute inset-0 bg-[#FF4D8D] rounded-[36px] transform -rotate-[2deg] -translate-y-3 translate-x-1 scale-[0.98] z-10"></div>
+
+      <!-- Main Purple Card (Expands to Fullscreen 100vw x 100vh) -->
+      <div id="main-purple-card" class="relative w-full h-full bg-[#4300D2] rounded-[36px] overflow-hidden z-20 transform -rotate-[0.8deg] shadow-2xl">
+        <!-- Noise Texture Overlay -->
+        <div class="absolute inset-0 noise-bg pointer-events-none z-30"></div>
+
+        <!-- LONG ILLUSTRATION PANNING CONTAINER (Tinggi 300vh agar tidak habis saat di-scroll) -->
+        <div id="illustration-canvas" class="relative w-full h-[300vh] bg-gradient-to-b from-[#4A00E0] via-[#3B00B3] to-[#2E008B]">
+          
+          <svg viewBox="0 0 1440 2700" preserveAspectRatio="xMidYMid slice" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+            <!-- Garis Orbit Tipis -->
+            <circle cx="480" cy="250" r="190" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
+            <circle cx="480" cy="250" r="150" stroke="#ffffff" stroke-opacity="0.2" stroke-width="1"/>
+            <path d="M 180 780 Q 650 580 1180 980" stroke="#ffffff" stroke-opacity="0.3" stroke-width="2" fill="none"/>
+            <path d="M 300 1650 Q 750 1850 1200 1700" stroke="#ffffff" stroke-opacity="0.4" stroke-width="2" fill="none"/>
+
+            <!-- SCENE 1 (00:00 - 00:01): Bola Biru Kecil & Hati 3D Pink -->
+            <circle cx="490" cy="250" r="95" fill="#5E2BFF" stroke="#ffffff" stroke-width="1.5"/>
+            <circle cx="515" cy="255" r="58" fill="url(#blueSphereGrad)"/>
+            <path d="M475 225 L485 205 L500 220 Z" fill="#2A0875"/>
+            <path d="M515 220 L530 205 L535 225 Z" fill="#2A0875"/>
+
+            <!-- Hati 3D Pink-Kuning Besar -->
+            <g transform="translate(830, 75) rotate(12)">
+              <path d="M140 60 C140 20 195 0 230 35 C265 0 320 20 320 60 C320 130 230 185 230 235 C230 185 140 130 140 60 Z" fill="#FFA800" transform="translate(-22, 14)"/>
+              <path d="M140 60 C140 20 195 0 230 35 C265 0 320 20 320 60 C320 130 230 185 230 235 C230 185 140 130 140 60 Z" fill="#FF5E9E"/>
+              <path d="M185 75 C185 55 212 45 230 62 C248 45 275 55 275 75 C275 110 230 138 230 162 C230 138 185 110 185 75 Z" fill="#27007A"/>
+            </g>
+
+            <!-- SCENE 2 (00:02 - 00:03): Pensil Raksasa, Balon Chat Gelap & Ikon Tangan -->
+            <g transform="translate(210, 620) rotate(-18)">
+              <rect x="0" y="0" width="240" height="130" rx="18" fill="#1F0066" stroke="#7B42FF" stroke-width="2"/>
+              <polygon points="190,130 230,130 250,165" fill="#1F0066"/>
+              <circle cx="65" cy="65" r="12" fill="#4A1FB8" stroke="#ffffff" stroke-width="1.5"/>
+              <circle cx="120" cy="65" r="12" fill="#4A1FB8" stroke="#ffffff" stroke-width="1.5"/>
+              <circle cx="175" cy="65" r="12" fill="#4A1FB8" stroke="#ffffff" stroke-width="1.5"/>
+            </g>
+
+            <!-- Pensil Kuning Raksasa -->
+            <g transform="translate(560, 560) rotate(32)">
+              <rect x="0" y="130" width="125" height="680" fill="#FFE169"/>
+              <rect x="35" y="130" width="55" height="680" fill="#FFC700"/>
+              <rect x="90" y="130" width="35" height="680" fill="#E09F00"/>
+              <polygon points="0,130 62.5,0 125,130" fill="#FF8577"/>
+              <polygon points="41,45 62.5,0 84,45" fill="#4A0E17"/>
+            </g>
+
+            <!-- Balon Chat Kanan -->
+            <g transform="translate(940, 720)">
+              <rect x="50" y="0" width="210" height="140" rx="12" fill="#2A008C" stroke="#FF70A6" stroke-width="1.5"/>
+              <circle cx="45" cy="70" r="24" fill="#FFE6EB"/>
+              <circle cx="105" cy="70" r="24" fill="#FF9E00"/>
+              <circle cx="165" cy="70" r="24" fill="#6B0F1A"/>
+            </g>
+
+            <!-- SCENE 3 & 4 (00:03 - 00:05): Mesin/Kamera Ungu, Kerucut & Bola Senyum Besar -->
+            <g transform="translate(330, 1140) rotate(22)">
+              <rect x="0" y="0" width="330" height="220" rx="45" fill="#5928E5" stroke="#230075" stroke-width="3"/>
+              <polygon points="60,210 95,210 75,310" fill="#FF66B2"/>
+              <polygon points="210,210 245,210 225,310" fill="#FF66B2"/>
+            </g>
+
+            <!-- Layar Monitor Isometric di Kanan -->
+            <g transform="translate(860, 1020) rotate(-14)">
+              <rect x="0" y="0" width="450" height="580" rx="28" fill="#4E1EC4" stroke="#7E52FF" stroke-width="3"/>
+              <rect x="45" y="45" width="360" height="390" rx="16" fill="#220070"/>
+              <rect x="80" y="90" width="240" height="110" rx="12" fill="#140047" stroke="#FF66B2" stroke-width="1.5"/>
+              <path d="M 160 490 Q 225 535 290 490" stroke="#110038" stroke-width="7" stroke-linecap="round" fill="none"/>
+              <circle cx="285" cy="505" r="22" fill="#FFF275"/>
+            </g>
+
+            <!-- Bola Biru Besar Tersenyum (Kiri Bawah) -->
+            <g transform="translate(60, 1460)">
+              <circle cx="340" cy="380" r="340" fill="url(#bigSmileGrad)"/>
+              <ellipse cx="195" cy="275" rx="6" ry="22" fill="#140047" transform="rotate(-12 195 275)"/>
+              <ellipse cx="295" cy="260" rx="6" ry="22" fill="#140047" transform="rotate(-12 295 260)"/>
+              <path d="M 110 325 C 140 485, 360 465, 385 295" stroke="#140047" stroke-width="6" stroke-linecap="round" fill="none"/>
+              <path d="M 98 320 L 122 330" stroke="#140047" stroke-width="6" stroke-linecap="round"/>
+              <path d="M 372 292 L 398 300" stroke="#140047" stroke-width="6" stroke-linecap="round"/>
+            </g>
+
+            <!-- Topi Kerucut Pesta & Podium di Tengah Bawah -->
+            <g transform="translate(740, 1580)">
+              <polygon points="120,0 25,240 215,240" fill="#FF4D8D"/>
+              <path d="M 62 150 Q 120 180 178 150" stroke="#FFC700" stroke-width="28" fill="none"/>
+              <rect x="10" y="240" width="220" height="110" fill="#4A15AD"/>
+              <circle cx="120" cy="315" r="42" fill="#1A0052" stroke="#FFF275" stroke-width="8" stroke-dasharray="12 12"/>
+            </g>
+
+            <defs>
+              <radialGradient id="blueSphereGrad" cx="30%" cy="30%" r="70%">
+                <stop offset="0%" stop-color="#BCE0FD"/>
+                <stop offset="50%" stop-color="#5E7CE2"/>
+                <stop offset="100%" stop-color="#2A1B9E"/>
+              </radialGradient>
+              <radialGradient id="bigSmileGrad" cx="25%" cy="25%" r="75%">
+                <stop offset="0%" stop-color="#D4FC79"/>
+                <stop offset="35%" stop-color="#96E6A1"/>
+                <stop offset="70%" stop-color="#4E65FF"/>
+                <stop offset="100%" stop-color="#2B0996"/>
+              </radialGradient>
+            </defs>
+          </svg>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= ANALYTICS & REPORTING SECTION (CURTAIN REVEAL) ================= -->
+  <section id="analytics-section" class="relative z-30 bg-white rounded-t-[48px] -mt-14 pt-24 pb-32 px-6 md:px-16 shadow-[0_-25px_50px_-12px_rgba(0,0,0,0.28)]">
+    <div class="max-w-6xl mx-auto">
+      
+      <!-- Section Heading -->
+      <h2 class="text-4xl md:text-[3.25rem] font-medium text-center text-neutral-900 tracking-tight leading-[1.15] mb-16">
+        Advanced Analytics<br>and Reporting
+      </h2>
+
+      <!-- Bento Grid 2 Columns -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- KARTU KIRI (5 Kolom): Hashtag Performance <-> Audience Demographics -->
+        <div class="lg:col-span-5 bg-[#F8F9FA] rounded-[32px] p-8 flex flex-col justify-between relative overflow-hidden min-h-[430px] border border-neutral-100">
+          
+          <!-- STATE 1: Hashtag Performance -->
+          <div id="left-card-hashtags" class="w-full h-full flex flex-col justify-between transition-opacity duration-500">
+            <h3 class="text-2xl font-medium text-neutral-900">Hashtag Performance</h3>
+            
+            <div id="hashtag-stage" class="relative w-full h-[300px] mt-4 overflow-hidden">
+              <div class="hashtag-pill" data-x="18%" data-y="135px" data-rot="-28">#Nature</div>
+              <div class="hashtag-pill" data-x="46%" data-y="125px" data-rot="-15">#Art</div>
+              <div class="hashtag-pill" data-x="62%" data-y="150px" data-rot="18">#Photography</div>
+              <div class="hashtag-pill" data-x="6%" data-y="182px" data-rot="-14">#Cooking</div>
+              <div class="hashtag-pill" data-x="38%" data-y="175px" data-rot="14">#Fun</div>
+              <div class="hashtag-pill" data-x="55%" data-y="195px" data-rot="-8">#AI</div>
+              <div class="hashtag-pill" data-x="2%" data-y="235px" data-rot="-35">#Travel</div>
+              <div class="hashtag-pill" data-x="16%" data-y="238px" data-rot="-12">#Selfie</div>
+              <div class="hashtag-pill" data-x="40%" data-y="220px" data-rot="-10">#Explore</div>
+              <div class="hashtag-pill" data-x="68%" data-y="218px" data-rot="22">#Fitness</div>
+              <div class="hashtag-pill" data-x="35%" data-y="255px" data-rot="4">#Foodie</div>
+              <div class="hashtag-pill" data-x="62%" data-y="255px" data-rot="6">#Movie</div>
+            </div>
+          </div>
+
+          <!-- STATE 2: Audience Demographics -->
+          <div id="left-card-demographics" class="absolute inset-8 flex flex-col justify-between opacity-0 pointer-events-none transition-opacity duration-500">
+            <h3 class="text-2xl font-medium text-neutral-900">Audience Demographics</h3>
+            
+            <div class="space-y-3.5 my-auto py-4">
+              <div class="flex items-center space-x-3">
+                <div class="demo-bar h-9 bg-[#FF66A3] rounded-lg flex items-center justify-end px-3 text-white text-xs font-semibold" data-width="78%">78%</div>
+                <span class="text-xs font-medium text-neutral-700 whitespace-nowrap">Pet Owners</span>
+              </div>
+              <div class="flex items-center space-x-3">
+                <div class="demo-bar h-9 bg-[#FF66A3] rounded-lg flex items-center justify-end px-3 text-white text-xs font-semibold" data-width="62%">56%</div>
+                <span class="text-xs font-medium text-neutral-700 whitespace-nowrap">Travelers</span>
+              </div>
+              <div class="flex items-center space-x-3">
+                <div class="demo-bar h-9 bg-[#FF66A3] rounded-lg flex items-center justify-end px-3 text-white text-xs font-semibold" data-width="55%">52%</div>
+                <span class="text-xs font-medium text-neutral-700 whitespace-nowrap">Parents</span>
+              </div>
+              <div class="flex items-center space-x-3">
+                <div class="demo-bar h-9 bg-[#FF66A3] rounded-lg flex items-center justify-end px-3 text-white text-xs font-semibold" data-width="46%">45%</div>
+                <span class="text-xs font-medium text-neutral-700 whitespace-nowrap">Foodies</span>
+              </div>
+              <div class="flex items-center space-x-3">
+                <div class="demo-bar h-9 bg-[#FF66A3] rounded-lg flex items-center justify-end px-3 text-white text-xs font-semibold" data-width="38%">38%</div>
+                <span class="text-xs font-medium text-neutral-700 whitespace-nowrap">Fitness Enthusiasts</span>
+              </div>
+              <div class="flex items-center space-x-3">
+                <div class="demo-bar h-9 bg-[#FF66A3] rounded-lg flex items-center justify-end px-3 text-white text-xs font-semibold" data-width="29%">28%</div>
+                <span class="text-xs font-medium text-neutral-700 whitespace-nowrap">Fashionistas</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom 4-Color Progress Indicators -->
+          <div class="grid grid-cols-4 gap-2 pt-3 border-t border-neutral-200/60 z-10">
+            <div class="h-1.5 rounded-full bg-[#FFC700]"></div>
+            <div class="h-1.5 rounded-full bg-[#FF4D8D]"></div>
+            <div class="h-1.5 rounded-full bg-[#5E17EB]"></div>
+            <div class="h-1.5 rounded-full bg-[#A5B4FC]"></div>
+          </div>
+        </div>
+
+        <!-- KARTU KANAN (7 Kolom): Optimizing Performance -->
+        <div class="lg:col-span-7 bg-[#F8F9FA] rounded-[32px] p-8 flex flex-col justify-between min-h-[430px] border border-neutral-100">
+          <h3 class="text-2xl font-medium text-neutral-900 mb-6">Optimizing Performance</h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center my-auto">
+            
+            <!-- Sub-kolom Kiri: 2 Kotak Metrik Warna -->
+            <div class="md:col-span-4 space-y-4">
+              <div class="bg-[#FFCC00] rounded-2xl p-5 text-neutral-900 shadow-sm">
+                <p class="text-xs font-medium opacity-80 mb-2">Engagement Rate</p>
+                <div id="metric-engagement" class="text-4xl font-semibold tracking-tight">+26%</div>
+              </div>
+              <div class="bg-[#FF5C97] rounded-2xl p-5 text-white shadow-sm">
+                <p class="text-xs font-medium opacity-90 mb-2">Followers</p>
+                <div id="metric-followers" class="text-4xl font-semibold tracking-tight">+50%</div>
+              </div>
+            </div>
+
+            <!-- Sub-kolom Kanan: Filter Waktu & Line Chart -->
+            <div class="md:col-span-8 flex flex-col justify-between h-full space-y-6">
+              
+              <div class="flex flex-wrap items-center gap-1.5 justify-end">
+                <button class="text-xs px-3 py-1.5 rounded-full border border-neutral-300 text-neutral-700 bg-white">3 days</button>
+                <button class="text-xs px-3 py-1.5 rounded-full bg-[#111111] text-white font-medium">1 week</button>
+                <button class="text-xs px-3 py-1.5 rounded-full border border-neutral-300 text-neutral-700 bg-white">1 month</button>
+                <button class="text-xs px-3 py-1.5 rounded-full border border-neutral-300 text-neutral-700 bg-white">3 months</button>
+                <button class="text-xs px-3 py-1.5 rounded-full border border-neutral-300 text-neutral-700 bg-white">6 months</button>
+                <button class="text-xs px-3 py-1.5 rounded-full border border-neutral-300 text-neutral-700 bg-white">1 year</button>
+              </div>
+
+              <!-- Dynamic SVG Chart -->
+              <div class="relative w-full h-[210px] pt-4">
+                <svg viewBox="0 0 400 170" class="w-full h-full overflow-visible">
+                  <line x1="0" y1="145" x2="390" y2="145" stroke="#E5E7EB" stroke-width="1.5"/>
+                  <line id="chart-vline-1" x1="85" y1="78" x2="85" y2="145" stroke="#111111" stroke-width="1"/>
+                  <line id="chart-vline-2" x1="255" y1="92" x2="255" y2="145" stroke="#111111" stroke-width="1"/>
+
+                  <path id="yellow-line" d="M 10 145 L 85 95 L 185 118 L 285 98 L 380 140" fill="none" stroke="#FFCC00" stroke-width="2.5" stroke-linecap="round"/>
+                  <path id="pink-line" d="M 10 128 L 85 78 L 195 142 L 255 92 L 380 15" fill="none" stroke="#FF4D8D" stroke-width="2.5" stroke-linecap="round"/>
+
+                  <circle id="dot-1" cx="85" cy="78" r="4" fill="#111111"/>
+                  <g id="tooltip-1" transform="translate(32, 62)">
+                    <rect x="0" y="0" width="44" height="22" rx="11" fill="#111111"/>
+                    <text id="tooltip-text-1" x="22" y="15" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">+28%</text>
+                  </g>
+
+                  <circle id="dot-2" cx="255" cy="92" r="4" fill="#111111"/>
+                  <g id="tooltip-2" transform="translate(202, 76)">
+                    <rect x="0" y="0" width="44" height="22" rx="11" fill="#111111"/>
+                    <text id="tooltip-text-2" x="22" y="15" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">+43%</text>
+                  </g>
+                </svg>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= JAVASCRIPT ANIMATIONS ================= -->
+  <script>
+    gsap.registerPlugin(ScrollTrigger);
+
+    const navbar = document.getElementById('navbar');
+    
+    const heroTl = gsap.timeline({
+      scrollTrigger: {
+        trigger: "#scroll-wrapper",
+        start: "top top",
+        end: "+=2400",
+        scrub: 0.5,
+        pin: true,
+        onUpdate: (self) => {
+          // Saat kartu sudah naik menyentuh navbar (progress > 0.12), aktifkan dark mode pada navbar
+          if (self.progress > 0.12 && self.progress < 0.94) {
+            navbar.classList.add('nav-dark-mode');
+          } else {
+            navbar.classList.remove('nav-dark-mode');
+          }
+        }
+      }
+    });
+
+    // Step A: Hero text fade out ke atas, dan Card Stage langsung naik ke top: 0px & memenuhi 100vw x 100vh tanpa celah putih
+    heroTl.to("#hero-content", {
+      opacity: 0,
+      y: -90,
+      duration: 0.18,
+      ease: "power2.inOut"
+    }, 0)
+    .to(["#back-card-yellow", "#back-card-pink"], {
+      opacity: 0,
+      scale: 1.04,
+      duration: 0.15
+    }, 0)
+    .to("#card-stage", {
+      top: "0px",
+      width: "100vw",
+      maxWidth: "100vw",
+      height: "100vh",
+      duration: 0.25,
+      ease: "power2.inOut"
+    }, 0)
+    .to("#main-purple-card", {
+      rotation: 0,
+      borderRadius: "0px",
+      duration: 0.25,
+      ease: "power2.inOut"
+    }, 0);
+
+    // Step B: Kamera menelusuri isi ilustrasi dari atas ke bawah setelah kartu full-screen
+    heroTl.to("#illustration-canvas", {
+      y: "-185vh",
+      duration: 0.75,
+      ease: "none"
+    }, 0.22);
+
+
+    // 2. ANIMASI SECTION ANALYTICS
+    let analyticsPlayed = false;
+
+    ScrollTrigger.create({
+      trigger: "#analytics-section",
+      start: "top 68%",
+      onEnter: () => {
+        if (!analyticsPlayed) {
+          analyticsPlayed = true;
+          runAnalyticsSequence();
+        }
+      }
+    });
+
+    function runAnalyticsSequence() {
+      const pills = document.querySelectorAll('.hashtag-pill');
+      pills.forEach((pill, i) => {
+        const targetX = pill.getAttribute('data-x');
+        const targetY = pill.getAttribute('data-y');
+        const targetRot = pill.getAttribute('data-rot');
+
+        gsap.set(pill, {
+          left: targetX,
+          top: -80,
+          rotation: gsap.utils.random(-45, 45),
+          opacity: 1
+        });
+
+        gsap.to(pill, {
+          top: targetY,
+          rotation: targetRot,
+          duration: 0.85,
+          delay: i * 0.055,
+          ease: "bounce.out"
+        });
+      });
+
+      const metricsObj = { eng: 26, fol: 50, tip1: 28, tip2: 43 };
+      const engEl = document.getElementById('metric-engagement');
+      const folEl = document.getElementById('metric-followers');
+      const tip1El = document.getElementById('tooltip-text-1');
+      const tip2El = document.getElementById('tooltip-text-2');
+
+      gsap.to(metricsObj, {
+        eng: 48,
+        fol: 59,
+        tip1: 38,
+        tip2: 54,
+        duration: 3.6,
+        ease: "power1.inOut",
+        onUpdate: () => {
+          engEl.textContent = `+${Math.round(metricsObj.eng)}%`;
+          folEl.textContent = `+${Math.round(metricsObj.fol)}%`;
+          tip1El.textContent = `+${Math.round(metricsObj.tip1)}%`;
+          tip2El.textContent = `+${Math.round(metricsObj.tip2)}%`;
+        }
+      });
+
+      gsap.to("#pink-line", {
+        attr: { d: "M 10 135 L 85 92 L 195 142 L 255 102 L 380 28" },
+        duration: 3.6,
+        ease: "power1.inOut"
+      });
+      gsap.to("#yellow-line", {
+        attr: { d: "M 10 145 L 85 110 L 185 78 L 285 130 L 380 120" },
+        duration: 3.6,
+        ease: "power1.inOut"
+      });
+
+      setTimeout(() => {
+        const hashtagCard = document.getElementById('left-card-hashtags');
+        const demoCard = document.getElementById('left-card-demographics');
+        const bars = document.querySelectorAll('.demo-bar');
+
+        hashtagCard.style.opacity = '0';
+        demoCard.style.opacity = '1';
+        demoCard.style.pointerEvents = 'auto';
+
+        setTimeout(() => {
+          bars.forEach((bar, idx) => {
+            setTimeout(() => {
+              bar.style.width = bar.getAttribute('data-width');
+            }, idx * 80);
+          });
+        }, 150);
+
+      }, 2200);
+    }
+  </script>
+</body>
+</html>
