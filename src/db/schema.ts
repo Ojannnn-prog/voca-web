@@ -19,6 +19,8 @@ export const trialLeads = pgTable("trial_leads", {
 export const members = pgTable("members", {
   id: serial("id").primaryKey(),
   memberId: varchar("member_id", { length: 50 }).notNull().unique(), // contoh: VOCA-2026-001
+  username: varchar("username", { length: 100 }), // contoh: membervoca20261
+  password: varchar("password", { length: 100 }), // contoh: vocamember2026
   fullName: varchar("full_name", { length: 255 }).notNull(),
   phoneNumber: varchar("phone_number", { length: 50 }).notNull(),
   email: varchar("email", { length: 255 }),
@@ -33,6 +35,26 @@ export const members = pgTable("members", {
   bloodType: varchar("blood_type", { length: 10 }).default("O"),
   emergencyContact: varchar("emergency_contact", { length: 100 }),
   notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 2.1 Tabel Tagihan Bulanan / Invoicing Anggota VOCA
+export const memberInvoices = pgTable("member_invoices", {
+  id: serial("id").primaryKey(),
+  invoiceNumber: varchar("invoice_number", { length: 50 }).notNull().unique(), // contoh: INV-202610-001
+  memberId: varchar("member_id", { length: 50 }).notNull(), // relasi ke members.memberId
+  memberName: varchar("member_name", { length: 255 }).notNull(),
+  monthPeriod: varchar("month_period", { length: 50 }).notNull(), // contoh: "Oktober 2026"
+  amount: integer("amount").notNull(),
+  issueDate: timestamp("issue_date").defaultNow().notNull(),
+  dueDate: timestamp("due_date").notNull(), // batas waktu pembayaran (misal 7 hari setelah terbit)
+  status: varchar("status", { length: 50 }).default("unpaid").notNull(), // unpaid (belum bayar) | pending (menunggu verifikasi) | paid (lunas)
+  paymentProofUrl: text("payment_proof_url"), // URL file bukti transfer atau base64
+  paymentDate: timestamp("payment_date"),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("Transfer Bank"),
+  notes: text("notes"),
+  verifiedByUser: varchar("verified_by_user", { length: 100 }),
+  transactionCode: varchar("transaction_code", { length: 50 }), // relasi ke finance_transactions jika lunas
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

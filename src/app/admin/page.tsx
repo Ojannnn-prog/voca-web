@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { VocaLogo } from "@/components/common/VocaLogo";
 import { KtaCard } from "@/components/common/KtaCard";
 import {
@@ -32,6 +33,12 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  Receipt,
+  FileText,
+  Eye,
+  Send,
+  Copy,
+  CheckCheck,
 } from "lucide-react";
 
 interface Lead {
@@ -51,6 +58,8 @@ interface Lead {
 interface Member {
   id: number;
   memberId: string;
+  username: string | null;
+  password: string | null;
   fullName: string;
   phoneNumber: string;
   email: string | null;
@@ -65,6 +74,25 @@ interface Member {
   bloodType: string | null;
   emergencyContact: string | null;
   notes: string | null;
+  createdAt: string;
+}
+
+interface Invoice {
+  id: number;
+  invoiceNumber: string;
+  memberId: string;
+  memberName: string;
+  monthPeriod: string;
+  amount: number;
+  issueDate: string;
+  dueDate: string;
+  status: "unpaid" | "pending" | "paid" | "cancelled";
+  paymentProofUrl: string | null;
+  paymentDate: string | null;
+  paymentMethod: string | null;
+  notes: string | null;
+  verifiedByUser: string | null;
+  transactionCode: string | null;
   createdAt: string;
 }
 
@@ -98,12 +126,13 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "applicants" | "members" | "finance" | "users"
+    "dashboard" | "applicants" | "members" | "invoices" | "finance" | "users"
   >("dashboard");
 
   // State Data
   const [leads, setLeads] = useState<Lead[]>([]);
   const [membersList, setMembersList] = useState<Member[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [financeSummary, setFinanceSummary] = useState({
     totalIncome: 0,
@@ -120,15 +149,30 @@ export default function AdminDashboardPage() {
   // Search & Filter
   const [leadFilter, setLeadFilter] = useState("all");
   const [memberSearch, setMemberSearch] = useState("");
+  const [invoiceFilter, setInvoiceFilter] = useState("all");
   const [financeFilter, setFinanceFilter] = useState("all");
 
   // Modals
   const [selectedKtaMember, setSelectedKtaMember] = useState<Member | null>(null);
+  const [selectedProofInvoice, setSelectedProofInvoice] = useState<Invoice | null>(null);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isAddFinanceOpen, setIsAddFinanceOpen] = useState(false);
   const [financeModalType, setFinanceModalType] = useState<"income" | "expense">("income");
   const [isConvertLeadOpen, setIsConvertLeadOpen] = useState<Lead | null>(null);
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isBulkInvoiceOpen, setIsBulkInvoiceOpen] = useState(false);
+  const [isSingleInvoiceOpen, setIsSingleInvoiceOpen] = useState(false);
+
+  // Success Notification for Auto-Generated Credentials
+  const [generatedAccountSuccess, setGeneratedAccountSuccess] = useState<{
+    fullName: string;
+    phoneNumber: string;
+    username: string;
+    password: string;
+    memberId: string;
+  } | null>(null);
+
+  const [copiedText, setCopiedText] = useState(false);
 
   // Form States - Add Member
   const [newMemberForm, setNewMemberForm] = useState({
@@ -152,6 +196,22 @@ export default function AdminDashboardPage() {
     memberId: "",
     paymentMethod: "Transfer Bank",
     description: "",
+  });
+
+  // Form States - Bulk Invoice
+  const [bulkInvoiceForm, setBulkInvoiceForm] = useState({
+    monthPeriod: "Oktober 2026",
+    daysUntilDue: "7",
+    notes: "Tagihan Iuran Bulanan Reguler VOCA",
+  });
+
+  // Form States - Single Invoice
+  const [singleInvoiceForm, setSingleInvoiceForm] = useState({
+    memberId: "",
+    monthPeriod: "Oktober 2026",
+    amount: "347000",
+    daysUntilDue: "7",
+    notes: "Tagihan Iuran Khusus",
   });
 
   // Form States - Add User
@@ -178,7 +238,12 @@ export default function AdminDashboardPage() {
       const dataMembers = await resMembers.json();
       if (dataMembers.success) setMembersList(dataMembers.members || []);
 
-      // 3. Fetch finance
+      // 3. Fetch invoices
+      const resInvoices = await fetch("/api/admin/invoices");
+      const dataInvoices = await resInvoices.json();
+      if (dataInvoices.success) setInvoices(dataInvoices.invoices || []);
+
+      // 4. Fetch finance
       const resFinance = await fetch("/api/admin/finance");
       const dataFinance = await resFinance.json();
       if (dataFinance.success) {
@@ -186,7 +251,7 @@ export default function AdminDashboardPage() {
         if (dataFinance.summary) setFinanceSummary(dataFinance.summary);
       }
 
-      // 4. Fetch users
+      // 5. Fetch users
       const resUsers = await fetch("/api/admin/users");
       const dataUsers = await resUsers.json();
       if (dataUsers.success) setSystemUsersList(dataUsers.users || []);
@@ -238,7 +303,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Convert Lead to Official Member
+  // Convert Lead to Official Member (Auto-generate membervoca2026x & vocamember2026)
   const handleConvertLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isConvertLeadOpen) return;
@@ -249,16 +314,29 @@ export default function AdminDashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leadId: isConvertLeadOpen.id,
-          programType: isConvertLeadOpen.planType === "premium_private" ? "Premium Private Class" : "Reguler Member",
-          sportBranch: isConvertLeadOpen.programCategory === "motoric" ? "Fundamental Motorik" : "Renang & Akuatik",
-          monthlyFee: isConvertLeadOpen.planType === "premium_private" ? 400000 : 347000,
+          programType:
+            isConvertLeadOpen.planType === "premium_private"
+              ? "Premium Private Class"
+              : "Reguler Member",
+          sportBranch:
+            isConvertLeadOpen.programCategory === "motoric"
+              ? "Fundamental Motorik"
+              : "Renang & Akuatik",
+          monthlyFee:
+            isConvertLeadOpen.planType === "premium_private" ? 400000 : 347000,
         }),
       });
       const data = await res.json();
       if (data.success) {
+        setGeneratedAccountSuccess({
+          fullName: isConvertLeadOpen.fullName,
+          phoneNumber: isConvertLeadOpen.phoneNumber,
+          username: data.credentials.username,
+          password: data.credentials.password,
+          memberId: data.credentials.memberId,
+        });
         setIsConvertLeadOpen(null);
         await fetchAllData();
-        alert(data.message || "Pendaftar berhasil dijadikan anggota resmi VOCA!");
       } else {
         alert(data.error || "Gagal konversi keanggotaan.");
       }
@@ -269,7 +347,7 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Add Member
+  // Add Member Manually
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -282,6 +360,13 @@ export default function AdminDashboardPage() {
       const data = await res.json();
       if (data.success) {
         setIsAddMemberOpen(false);
+        setGeneratedAccountSuccess({
+          fullName: newMemberForm.fullName,
+          phoneNumber: newMemberForm.phoneNumber,
+          username: data.member.username || `membervoca2026`,
+          password: data.member.password || `vocamember2026`,
+          memberId: data.member.memberId,
+        });
         setNewMemberForm({
           fullName: "",
           phoneNumber: "",
@@ -296,7 +381,6 @@ export default function AdminDashboardPage() {
           notes: "",
         });
         await fetchAllData();
-        alert(data.message);
       } else {
         alert(data.error || "Gagal menambah anggota.");
       }
@@ -329,6 +413,118 @@ export default function AdminDashboardPage() {
     if (!confirm("Apakah Anda yakin ingin menghapus anggota ini?")) return;
     try {
       const res = await fetch(`/api/admin/members?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        await fetchAllData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Update Invoice Status (LUNAS, PENDING, UNPAID) - Otomatis Mutasi Saldo Kas!
+  const handleUpdateInvoiceStatus = async (
+    id: number,
+    status: "paid" | "pending" | "unpaid",
+    paymentMethod?: string
+  ) => {
+    setActionLoadingId(id);
+    try {
+      const res = await fetch("/api/admin/invoices", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status, paymentMethod }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (selectedProofInvoice && selectedProofInvoice.id === id) {
+          setSelectedProofInvoice(null);
+        }
+        await fetchAllData();
+        alert(data.message);
+      } else {
+        alert(data.error || "Gagal memperbarui status tagihan.");
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Bulk Invoice Generation
+  const handleGenerateBulkInvoices = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const days = parseInt(bulkInvoiceForm.daysUntilDue, 10) || 7;
+      const targetDueDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+      const res = await fetch("/api/admin/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "bulk",
+          monthPeriod: bulkInvoiceForm.monthPeriod,
+          dueDate: targetDueDate.toISOString(),
+          notes: bulkInvoiceForm.notes,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsBulkInvoiceOpen(false);
+        await fetchAllData();
+        alert(data.message);
+      } else {
+        alert(data.error || "Gagal menerbitkan tagihan massal.");
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Single Invoice Creation
+  const handleCreateSingleInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const days = parseInt(singleInvoiceForm.daysUntilDue, 10) || 7;
+      const targetDueDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+      const res = await fetch("/api/admin/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "single",
+          memberId: singleInvoiceForm.memberId,
+          monthPeriod: singleInvoiceForm.monthPeriod,
+          amount: singleInvoiceForm.amount,
+          dueDate: targetDueDate.toISOString(),
+          notes: singleInvoiceForm.notes,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsSingleInvoiceOpen(false);
+        await fetchAllData();
+        alert(data.message);
+      } else {
+        alert(data.error || "Gagal menerbitkan tagihan.");
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Delete Invoice
+  const handleDeleteInvoice = async (id: number) => {
+    if (!confirm("Hapus catatan tagihan ini?")) return;
+    try {
+      const res = await fetch(`/api/admin/invoices?id=${id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         await fetchAllData();
@@ -457,8 +653,17 @@ export default function AdminDashboardPage() {
     return (
       m.fullName.toLowerCase().includes(q) ||
       m.memberId.toLowerCase().includes(q) ||
-      m.phoneNumber.includes(q)
+      m.phoneNumber.includes(q) ||
+      (m.username && m.username.toLowerCase().includes(q))
     );
+  });
+
+  // Filtered Invoices
+  const filteredInvoices = invoices.filter((i) => {
+    if (invoiceFilter === "unpaid") return i.status === "unpaid";
+    if (invoiceFilter === "pending") return i.status === "pending";
+    if (invoiceFilter === "paid") return i.status === "paid";
+    return true;
   });
 
   // Filtered Transactions
@@ -470,6 +675,7 @@ export default function AdminDashboardPage() {
 
   const pendingLeadsCount = leads.filter((l) => l.status === "pending").length;
   const activeMembersCount = membersList.filter((m) => m.status === "active").length;
+  const pendingInvoicesCount = invoices.filter((i) => i.status === "pending").length;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-neutral-900 flex flex-col md:flex-row">
@@ -487,7 +693,8 @@ export default function AdminDashboardPage() {
             {[
               { id: "dashboard", label: "Dashboard Utama", icon: Layers, badge: null },
               { id: "applicants", label: "Pendaftar Baru", icon: FileCheck, badge: pendingLeadsCount },
-              { id: "members", label: "Database Anggota & KTA", icon: Users, badge: activeMembersCount },
+              { id: "members", label: "Database Anggota", icon: Users, badge: activeMembersCount },
+              { id: "invoices", label: "Tagihan & Bukti Bayar", icon: Receipt, badge: pendingInvoicesCount },
               { id: "finance", label: "Kas & Keuangan Klub", icon: DollarSign, badge: null },
               { id: "users", label: "Kelola User & Staf", icon: UserCheck, badge: null },
             ].map((nav) => {
@@ -510,7 +717,11 @@ export default function AdminDashboardPage() {
                   {nav.badge !== null && nav.badge > 0 && (
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        isActive ? "bg-white text-[#5E17EB]" : "bg-neutral-200 text-neutral-700"
+                        isActive
+                          ? "bg-white text-[#5E17EB]"
+                          : nav.id === "invoices"
+                          ? "bg-amber-100 text-amber-800 animate-pulse"
+                          : "bg-neutral-200 text-neutral-700"
                       }`}
                     >
                       {nav.badge}
@@ -555,7 +766,8 @@ export default function AdminDashboardPage() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight">
               {activeTab === "dashboard" && "Dashboard Tata Kelola VOCA"}
               {activeTab === "applicants" && "Pendaftaran & Trial Leads"}
-              {activeTab === "members" && "Database Anggota Resmi & KTA Digital"}
+              {activeTab === "members" && "Database Anggota Resmi & Akun Member"}
+              {activeTab === "invoices" && "Manajemen Tagihan & Verifikasi Bukti Transfer"}
               {activeTab === "finance" && "Buku Kas & Transaksi Keuangan Klub"}
               {activeTab === "users" && "Kelola User, Pengurus, & Pelatih"}
             </h1>
@@ -564,7 +776,7 @@ export default function AdminDashboardPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <button
               onClick={fetchAllData}
               disabled={isLoading}
@@ -582,6 +794,25 @@ export default function AdminDashboardPage() {
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Anggota Baru</span>
               </button>
+            )}
+
+            {activeTab === "invoices" && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsBulkInvoiceOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md shadow-purple-500/20 transition active:scale-95"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                  <span>Terbitkan Tagihan Massal</span>
+                </button>
+                <button
+                  onClick={() => setIsSingleInvoiceOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-bold transition shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tagihan Khusus</span>
+                </button>
+              </div>
             )}
 
             {activeTab === "finance" && (
@@ -621,6 +852,83 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
+        {/* NOTIFIKASI AKUN ANGGOTA BARU TER-GENERATE */}
+        {generatedAccountSuccess && (
+          <div className="mb-8 p-6 bg-gradient-to-r from-purple-900 to-indigo-900 text-white rounded-[24px] shadow-xl border border-purple-400/30 relative overflow-hidden animate-fadeIn">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-500/30 text-yellow-300 text-[11px] font-bold border border-yellow-300/30">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Akun Anggota Berhasil Ter-Generate Otomatis!</span>
+                </div>
+                <h3 className="text-xl font-bold tracking-tight">
+                  Kredensial Login Anggota: {generatedAccountSuccess.fullName}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+                  <div className="bg-black/30 p-3 rounded-xl border border-white/10">
+                    <span className="text-neutral-400 block text-[10px] uppercase font-bold">Username</span>
+                    <strong className="font-mono text-base text-yellow-300 select-all">
+                      {generatedAccountSuccess.username}
+                    </strong>
+                  </div>
+                  <div className="bg-black/30 p-3 rounded-xl border border-white/10">
+                    <span className="text-neutral-400 block text-[10px] uppercase font-bold">Password</span>
+                    <strong className="font-mono text-base text-white select-all">
+                      {generatedAccountSuccess.password}
+                    </strong>
+                  </div>
+                  <div className="bg-black/30 p-3 rounded-xl border border-white/10">
+                    <span className="text-neutral-400 block text-[10px] uppercase font-bold">ID Anggota</span>
+                    <strong className="font-mono text-base text-cyan-300 select-all">
+                      {generatedAccountSuccess.memberId}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setGeneratedAccountSuccess(null)}
+                className="p-1.5 text-white/60 hover:text-white rounded-full hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between flex-wrap gap-2 text-xs">
+              <span className="text-neutral-300 text-[11px]">
+                Kirim informasi akun ke orang tua peserta via WhatsApp:
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `Halo Bapak/Ibu ${generatedAccountSuccess.fullName},\n\nSelamat! Akun Portal Anggota VOCA Anda telah aktif.\n\n📌 Username: ${generatedAccountSuccess.username}\n🔑 Password: ${generatedAccountSuccess.password}\n🆔 ID Member: ${generatedAccountSuccess.memberId}\n\nSilakan login di website VOCA: https://voca-athletics.com/login untuk cek jadwal latihan, KTA digital, dan status iuran.\n\nSalam,\nAdmin VOCA Athletics`;
+                    navigator.clipboard.writeText(text);
+                    setCopiedText(true);
+                    setTimeout(() => setCopiedText(false), 2500);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition"
+                >
+                  {copiedText ? <CheckCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedText ? "Tersalin!" : "Salin Kredensial"}</span>
+                </button>
+
+                <a
+                  href={`https://wa.me/${generatedAccountSuccess.phoneNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                    `Halo Bapak/Ibu ${generatedAccountSuccess.fullName},\n\nSelamat! Akun Portal Anggota VOCA Anda telah aktif.\n\n📌 Username: ${generatedAccountSuccess.username}\n🔑 Password: ${generatedAccountSuccess.password}\n🆔 ID Member: ${generatedAccountSuccess.memberId}\n\nSilakan login di https://voca-athletics.com/login untuk melihat KTA Digital dan status iuran.\n\nSalam hangat,\nAdmin VOCA Athletics`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold shadow-md transition"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Kirim Akun via WhatsApp</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ================= TAB 1: DASHBOARD UTAMA ================= */}
         {activeTab === "dashboard" && (
           <div className="space-y-8 animate-fadeIn">
@@ -628,33 +936,31 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <div className="bg-white p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
                 <div className="flex items-center justify-between text-neutral-400 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider">Pendaftar Baru</span>
+                  <span className="text-xs font-bold uppercase tracking-wider">Pendaftar Masuk</span>
                   <FileCheck className="w-4 h-4 text-purple-600" />
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-extrabold text-neutral-900">{leads.length}</span>
-                  <span className="text-xs font-bold text-amber-600">
-                    {pendingLeadsCount} Pending
-                  </span>
+                  <span className="text-xs font-bold text-amber-600">{pendingLeadsCount} Pending</span>
                 </div>
-                <p className="text-[11px] text-neutral-500 mt-1">Lead formulir masuk via web</p>
+                <p className="text-[11px] text-neutral-500 mt-1">Lead masuk dari web</p>
               </div>
 
               <div className="bg-white p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
                 <div className="flex items-center justify-between text-neutral-400 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider">Anggota Aktif</span>
+                  <span className="text-xs font-bold uppercase tracking-wider">Anggota Resmi</span>
                   <Users className="w-4 h-4 text-blue-600" />
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-extrabold text-neutral-900">{activeMembersCount}</span>
-                  <span className="text-xs font-bold text-emerald-600">Terdaftar KTA</span>
+                  <span className="text-xs font-bold text-emerald-600">Aktif</span>
                 </div>
-                <p className="text-[11px] text-neutral-500 mt-1">Total {membersList.length} anggota resmi</p>
+                <p className="text-[11px] text-neutral-500 mt-1">Total {membersList.length} akun terdaftar</p>
               </div>
 
               <div className="bg-white p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
                 <div className="flex items-center justify-between text-neutral-400 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider">Saldo Kas Klub</span>
+                  <span className="text-xs font-bold uppercase tracking-wider">Saldo Kas Bersih</span>
                   <DollarSign className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div className="flex items-baseline gap-1">
@@ -663,82 +969,79 @@ export default function AdminDashboardPage() {
                     {financeSummary.currentBalance.toLocaleString("id-ID")}
                   </span>
                 </div>
-                <p className="text-[11px] text-neutral-500 mt-1">
-                  Arus kas bersih saat ini
-                </p>
+                <p className="text-[11px] text-neutral-500 mt-1">Arus kas otomatis terverifikasi</p>
               </div>
 
               <div className="bg-white p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
                 <div className="flex items-center justify-between text-neutral-400 mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider">Total Pemasukan</span>
-                  <ArrowDownLeft className="w-4 h-4 text-teal-600" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Bukti Menunggu Cek</span>
+                  <Receipt className="w-4 h-4 text-amber-600" />
                 </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-xs font-bold text-neutral-500">Rp</span>
-                  <span className="text-2xl sm:text-3xl font-extrabold text-neutral-900">
-                    {financeSummary.totalIncome.toLocaleString("id-ID")}
-                  </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-extrabold text-amber-600">{pendingInvoicesCount}</span>
+                  <span className="text-xs font-bold text-neutral-500">Tagihan</span>
                 </div>
-                <p className="text-[11px] text-neutral-500 mt-1">
-                  Pengeluaran: Rp {financeSummary.totalExpense.toLocaleString("id-ID")}
-                </p>
+                <p className="text-[11px] text-neutral-500 mt-1">Perlu verifikasi admin</p>
               </div>
             </div>
 
             {/* Quick Actions & 2 Tables Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Recent Applicants */}
+              {/* Invoices Awaiting Verification */}
               <div className="bg-white rounded-[24px] border border-neutral-200/80 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="font-bold text-base text-neutral-900">Pendaftar Terbaru</h3>
-                    <p className="text-xs text-neutral-500">Pendaftar trial & konsultasi program</p>
+                    <h3 className="font-bold text-base text-neutral-900">Tagihan & Bukti Masuk</h3>
+                    <p className="text-xs text-neutral-500">Bukti transfer transfer yang perlu dicek</p>
                   </div>
                   <button
-                    onClick={() => setActiveTab("applicants")}
+                    onClick={() => setActiveTab("invoices")}
                     className="text-xs font-bold text-[#5E17EB] hover:underline"
                   >
-                    Lihat Semua
+                    Buka Menu Tagihan
                   </button>
                 </div>
 
                 <div className="divide-y divide-neutral-100">
-                  {leads.slice(0, 4).map((lead) => (
-                    <div key={lead.id} className="py-3 flex items-center justify-between">
+                  {invoices.slice(0, 4).map((inv) => (
+                    <div key={inv.id} className="py-3 flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-bold text-neutral-900">{lead.fullName}</p>
-                        <p className="text-[11px] text-neutral-500 capitalize">
-                          {lead.programCategory} • {lead.planType || "free_trial"}
+                        <p className="text-xs font-bold text-neutral-900">{inv.memberName}</p>
+                        <p className="text-[11px] text-neutral-500">
+                          {inv.invoiceNumber} • {inv.monthPeriod}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {lead.status === "pending" ? (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold">
-                            Pending
+                      <div className="text-right flex items-center gap-3">
+                        <div>
+                          <p className="text-xs font-extrabold text-neutral-900">
+                            Rp {inv.amount.toLocaleString("id-ID")}
+                          </p>
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                              inv.status === "paid"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : inv.status === "pending"
+                                ? "bg-amber-100 text-amber-700 animate-pulse"
+                                : "bg-neutral-100 text-neutral-600"
+                            }`}
+                          >
+                            {inv.status === "paid" ? "Lunas" : inv.status === "pending" ? "Pending" : "Belum Bayar"}
                           </span>
-                        ) : lead.status === "converted" ? (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
-                            Member Resmi
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
-                            Disetujui
-                          </span>
+                        </div>
+                        {inv.paymentProofUrl && (
+                          <button
+                            onClick={() => setSelectedProofInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"
+                            title="Lihat Bukti Transfer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                         )}
-                        <a
-                          href={`https://wa.me/${lead.phoneNumber.replace(/[^0-9]/g, "")}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition"
-                          title="Hubungi WhatsApp"
-                        >
-                          <Phone className="w-3.5 h-3.5" />
-                        </a>
                       </div>
                     </div>
                   ))}
-                  {leads.length === 0 && (
-                    <p className="text-xs text-neutral-400 py-4 text-center">Belum ada pendaftar baru.</p>
+                  {invoices.length === 0 && (
+                    <p className="text-xs text-neutral-400 py-4 text-center">Belum ada tagihan.</p>
                   )}
                 </div>
               </div>
@@ -747,8 +1050,8 @@ export default function AdminDashboardPage() {
               <div className="bg-white rounded-[24px] border border-neutral-200/80 p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="font-bold text-base text-neutral-900">Arus Kas Terbaru</h3>
-                    <p className="text-xs text-neutral-500">Mutasi iuran dan pengeluaran operasional</p>
+                    <h3 className="font-bold text-base text-neutral-900">Mutasi Kas Terbaru</h3>
+                    <p className="text-xs text-neutral-500">Otomatis tercatat saat tagihan lunas</p>
                   </div>
                   <button
                     onClick={() => setActiveTab("finance")}
@@ -773,8 +1076,7 @@ export default function AdminDashboardPage() {
                             trx.type === "income" ? "text-emerald-600" : "text-rose-600"
                           }`}
                         >
-                          {trx.type === "income" ? "+" : "-"} Rp{" "}
-                          {trx.amount.toLocaleString("id-ID")}
+                          {trx.type === "income" ? "+" : "-"} Rp {trx.amount.toLocaleString("id-ID")}
                         </p>
                         <p className="text-[10px] text-neutral-400 font-mono">{trx.transactionCode}</p>
                       </div>
@@ -832,9 +1134,7 @@ export default function AdminDashboardPage() {
                 <tbody className="divide-y divide-neutral-100 font-medium">
                   {filteredLeads.map((lead) => (
                     <tr key={lead.id} className="hover:bg-neutral-50/80 transition">
-                      <td className="py-3.5 px-4 font-bold text-neutral-900">
-                        {lead.fullName}
-                      </td>
+                      <td className="py-3.5 px-4 font-bold text-neutral-900">{lead.fullName}</td>
                       <td className="py-3.5 px-4 text-neutral-700 capitalize">
                         <span className="font-semibold block">{lead.programCategory}</span>
                         <span className="text-[11px] text-neutral-500">{lead.planType || "free_trial"}</span>
@@ -886,10 +1186,10 @@ export default function AdminDashboardPage() {
                             <button
                               onClick={() => setIsConvertLeadOpen(lead)}
                               className="flex items-center gap-1 px-3 py-1 rounded-lg bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-[11px] font-bold shadow-sm transition"
-                              title="Jadikan Anggota Resmi VOCA & Terbitkan KTA"
+                              title="Terima & Otomatis Buat Akun (membervoca2026x)"
                             >
                               <Sparkles className="w-3 h-3 text-yellow-300" />
-                              <span>Jadikan Member</span>
+                              <span>Buat Akun Member</span>
                             </button>
                           )}
                           {lead.status === "pending" && (
@@ -929,7 +1229,7 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* ================= TAB 3: DATABASE ANGGOTA & KTA DIGITAL ================= */}
+        {/* ================= TAB 3: DATABASE ANGGOTA & AKUN MEMBER ================= */}
         {activeTab === "members" && (
           <div className="space-y-6 animate-fadeIn">
             {/* Search Bar & Stats Header */}
@@ -938,7 +1238,7 @@ export default function AdminDashboardPage() {
                 <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Cari ID (VOCA-2026-...) atau Nama..."
+                  placeholder="Cari Username (membervoca...), ID, atau Nama..."
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5E17EB]/30 focus:border-[#5E17EB]"
@@ -957,7 +1257,7 @@ export default function AdminDashboardPage() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-neutral-50/80 text-neutral-500 font-bold border-b border-neutral-200/80">
-                      <th className="py-3.5 px-4">ID Anggota</th>
+                      <th className="py-3.5 px-4">ID & Akun Login</th>
                       <th className="py-3.5 px-4">Nama Lengkap</th>
                       <th className="py-3.5 px-4">Program & Kategori</th>
                       <th className="py-3.5 px-4">Iuran / Bulan</th>
@@ -969,8 +1269,16 @@ export default function AdminDashboardPage() {
                   <tbody className="divide-y divide-neutral-100 font-medium">
                     {filteredMembers.map((member) => (
                       <tr key={member.id} className="hover:bg-neutral-50/80 transition">
-                        <td className="py-3.5 px-4 font-mono font-bold text-[#5E17EB]">
-                          {member.memberId}
+                        <td className="py-3.5 px-4">
+                          <p className="font-mono font-bold text-[#5E17EB]">{member.memberId}</p>
+                          <div className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-neutral-600">
+                            <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+                              User: {member.username || `membervoca2026${member.id}`}
+                            </span>
+                            <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] text-neutral-500">
+                              Pass: {member.password || `vocamember2026`}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <p className="font-bold text-neutral-900">{member.fullName}</p>
@@ -1012,8 +1320,21 @@ export default function AdminDashboardPage() {
                               title="Lihat KTA Digital ISO/IEC 7810"
                             >
                               <CreditCard className="w-3 h-3" />
-                              <span>KTA Digital</span>
+                              <span>KTA</span>
                             </button>
+
+                            {/* Tombol WhatsApp Kirim Kredensial */}
+                            <a
+                              href={`https://wa.me/${member.phoneNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                                `Halo Bapak/Ibu ${member.fullName},\n\nBerikut akun resmi Portal Anggota VOCA:\nUsername: ${member.username || `membervoca2026${member.id}`}\nPassword: ${member.password || "vocamember2026"}\nID Member: ${member.memberId}\n\nSilakan login di https://voca-athletics.com/login.\n\nSalam,\nAdmin VOCA Athletics`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                              title="Kirim Kredensial Akun via WhatsApp"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                            </a>
 
                             {/* Tombol Perpanjang 1 Bulan */}
                             <button
@@ -1050,7 +1371,201 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* ================= TAB 4: KAS & KEUANGAN KLUB ================= */}
+        {/* ================= TAB 4: TAGIHAN & VERIFIKASI BUKTI TRANSFER ================= */}
+        {activeTab === "invoices" && (
+          <div className="space-y-6 animate-fadeIn">
+            {/* Invoices Status Header Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="bg-white p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 block mb-1">
+                  Menunggu Verifikasi Bukti
+                </span>
+                <p className="text-3xl font-extrabold text-amber-600">{pendingInvoicesCount}</p>
+                <p className="text-[11px] text-neutral-500 mt-1">Bukti transfer sudah diunggah orang tua</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-500 block mb-1">
+                  Belum Bayar (Unpaid)
+                </span>
+                <p className="text-3xl font-extrabold text-neutral-800">
+                  {invoices.filter((i) => i.status === "unpaid").length}
+                </p>
+                <p className="text-[11px] text-neutral-500 mt-1">Menunggu pembayaran orang tua</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 block mb-1">
+                  Tagihan Lunas (Paid)
+                </span>
+                <p className="text-3xl font-extrabold text-emerald-600">
+                  {invoices.filter((i) => i.status === "paid").length}
+                </p>
+                <p className="text-[11px] text-neutral-500 mt-1">Otomatis menambah saldo kas klub</p>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden">
+              <div className="p-4 sm:p-5 border-b border-neutral-100 flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5">
+                  {[
+                    { id: "all", label: `Semua (${invoices.length})` },
+                    { id: "pending", label: `Pending Bukti (${pendingInvoicesCount})` },
+                    { id: "unpaid", label: "Belum Bayar" },
+                    { id: "paid", label: "Lunas" },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setInvoiceFilter(f.id)}
+                      className={`text-xs px-3 py-1.5 rounded-full font-bold transition ${
+                        invoiceFilter === f.id
+                          ? "bg-[#5E17EB] text-white"
+                          : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-neutral-500">
+                  Klik <strong>Verifikasi Lunas</strong> untuk otomatis menambah saldo kas
+                </p>
+              </div>
+
+              {/* Invoices Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-neutral-50/80 text-neutral-500 font-bold border-b border-neutral-200/80">
+                      <th className="py-3.5 px-4">No. Tagihan</th>
+                      <th className="py-3.5 px-4">Anggota</th>
+                      <th className="py-3.5 px-4">Periode Bulan</th>
+                      <th className="py-3.5 px-4">Nominal</th>
+                      <th className="py-3.5 px-4">Batas Bayar</th>
+                      <th className="py-3.5 px-4">Status & Bukti</th>
+                      <th className="py-3.5 px-4 text-center">Aksi Status Admin</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 font-medium">
+                    {filteredInvoices.map((inv) => (
+                      <tr key={inv.id} className="hover:bg-neutral-50/80 transition">
+                        <td className="py-3.5 px-4 font-mono font-bold text-neutral-900">
+                          {inv.invoiceNumber}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <p className="font-bold text-neutral-900">{inv.memberName}</p>
+                          <p className="text-[11px] text-neutral-400 font-mono">{inv.memberId}</p>
+                        </td>
+                        <td className="py-3.5 px-4 text-neutral-700 font-semibold">
+                          {inv.monthPeriod}
+                        </td>
+                        <td className="py-3.5 px-4 font-extrabold text-sm text-neutral-900">
+                          Rp {inv.amount.toLocaleString("id-ID")}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-neutral-500">
+                          {new Date(inv.dueDate).toLocaleDateString("id-ID", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                inv.status === "paid"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : inv.status === "pending"
+                                  ? "bg-amber-100 text-amber-700 animate-pulse"
+                                  : "bg-neutral-100 text-neutral-600"
+                              }`}
+                            >
+                              {inv.status === "paid"
+                                ? "Lunas"
+                                : inv.status === "pending"
+                                ? "Pending Bukti"
+                                : "Belum Bayar"}
+                            </span>
+
+                            {inv.paymentProofUrl && (
+                              <button
+                                onClick={() => setSelectedProofInvoice(inv)}
+                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-[10px] font-bold border border-blue-200 transition"
+                                title="Buka foto bukti transfer"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Bukti</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Tombol Lunas -> Tambah Otomatis ke Kas */}
+                            {inv.status !== "paid" && (
+                              <button
+                                onClick={() => handleUpdateInvoiceStatus(inv.id, "paid")}
+                                disabled={actionLoadingId === inv.id}
+                                className="flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition disabled:opacity-50"
+                                title="Verifikasi Lunas dan Tambah ke Saldo Kas"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Lunas (Masuk Kas)</span>
+                              </button>
+                            )}
+
+                            {/* Tombol Pending */}
+                            {inv.status !== "pending" && inv.paymentProofUrl && (
+                              <button
+                                onClick={() => handleUpdateInvoiceStatus(inv.id, "pending")}
+                                disabled={actionLoadingId === inv.id}
+                                className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-[11px] font-bold transition disabled:opacity-50"
+                                title="Tandai Pending"
+                              >
+                                Pending
+                              </button>
+                            )}
+
+                            {/* Tombol Belum Bayar */}
+                            {inv.status !== "unpaid" && (
+                              <button
+                                onClick={() => handleUpdateInvoiceStatus(inv.id, "unpaid")}
+                                disabled={actionLoadingId === inv.id}
+                                className="px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[11px] font-bold transition disabled:opacity-50"
+                                title="Kembalikan ke Belum Bayar"
+                              >
+                                Batal
+                              </button>
+                            )}
+
+                            {/* Hapus Tagihan */}
+                            <button
+                              onClick={() => handleDeleteInvoice(inv.id)}
+                              className="p-1 text-neutral-400 hover:text-red-600 transition"
+                              title="Hapus Tagihan"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredInvoices.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-neutral-400">
+                          Tidak ada tagihan pada kategori filter ini.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= TAB 5: KAS & KEUANGAN KLUB ================= */}
         {activeTab === "finance" && (
           <div className="space-y-6 animate-fadeIn">
             {/* Financial Overview Cards */}
@@ -1062,7 +1577,9 @@ export default function AdminDashboardPage() {
                 <p className="text-3xl font-extrabold text-emerald-600">
                   Rp {financeSummary.currentBalance.toLocaleString("id-ID")}
                 </p>
-                <p className="text-[11px] text-neutral-500 mt-1">Total Pemasukan dikurangi Pengeluaran</p>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  Total Pemasukan dikurangi Pengeluaran
+                </p>
               </div>
 
               <div className="bg-white p-6 rounded-[24px] border border-neutral-200/80 shadow-sm">
@@ -1198,7 +1715,7 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* ================= TAB 5: KELOLA USER & STAF ================= */}
+        {/* ================= TAB 6: KELOLA USER & STAF ================= */}
         {activeTab === "users" && (
           <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden animate-fadeIn">
             <div className="overflow-x-auto">
@@ -1232,9 +1749,7 @@ export default function AdminDashboardPage() {
                           {user.role}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-neutral-700">
-                        {user.specialty || "-"}
-                      </td>
+                      <td className="py-3.5 px-4 text-neutral-700">{user.specialty || "-"}</td>
                       <td className="py-3.5 px-4 font-mono text-neutral-500">
                         {user.phoneNumber || "-"} • {user.email || "-"}
                       </td>
@@ -1259,7 +1774,271 @@ export default function AdminDashboardPage() {
         )}
       </main>
 
-      {/* ================= MODAL 1: PREVIEW & PRINT KTA DIGITAL ================= */}
+      {/* ================= MODAL 1: PREVIEW BUKTI TRANSFER & VERIFIKASI ================= */}
+      {selectedProofInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900">
+                  Bukti Transfer: {selectedProofInvoice.invoiceNumber}
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  {selectedProofInvoice.memberName} • Rp {selectedProofInvoice.amount.toLocaleString("id-ID")}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedProofInvoice(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Gambar Bukti Transfer Nyata */}
+            <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-200 mb-4 flex items-center justify-center">
+              {selectedProofInvoice.paymentProofUrl ? (
+                <Image
+                  src={selectedProofInvoice.paymentProofUrl}
+                  alt={`Bukti Transfer ${selectedProofInvoice.invoiceNumber}`}
+                  fill
+                  unoptimized
+                  className="object-contain"
+                />
+              ) : (
+                <p className="text-neutral-400 text-xs">Belum ada file bukti bayar yang diupload.</p>
+              )}
+            </div>
+
+            <div className="space-y-1 text-xs text-neutral-600 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 mb-4">
+              <p>
+                <strong>Metode Bayar:</strong> {selectedProofInvoice.paymentMethod || "Transfer Bank"}
+              </p>
+              <p>
+                <strong>Tanggal Upload:</strong>{" "}
+                {selectedProofInvoice.paymentDate
+                  ? new Date(selectedProofInvoice.paymentDate).toLocaleString("id-ID")
+                  : "-"}
+              </p>
+              <p>
+                <strong>Keterangan:</strong> {selectedProofInvoice.notes || "-"}
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-100">
+              <button
+                type="button"
+                onClick={() => handleUpdateInvoiceStatus(selectedProofInvoice.id, "unpaid")}
+                className="px-3.5 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-neutral-700 text-xs font-bold"
+              >
+                Tolak / Belum Bayar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdateInvoiceStatus(selectedProofInvoice.id, "paid")}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>Verifikasi LUNAS & Masuk Kas</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 2: TERBITKAN TAGIHAN MASSAL ================= */}
+      {isBulkInvoiceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span>Terbitkan Tagihan Massal</span>
+              </h3>
+              <button
+                onClick={() => setIsBulkInvoiceOpen(false)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleGenerateBulkInvoices} className="space-y-4 text-xs">
+              <p className="text-neutral-500 text-[11px] leading-relaxed">
+                Fitur ini akan secara otomatis menerbitkan tagihan bulanan kepada <strong>seluruh {activeMembersCount} anggota aktif</strong> sesuai dengan nominal iuran masing-masing.
+              </p>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Periode Bulan *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Oktober 2026 atau November 2026"
+                  value={bulkInvoiceForm.monthPeriod}
+                  onChange={(e) => setBulkInvoiceForm({ ...bulkInvoiceForm, monthPeriod: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">
+                  Batas Pembayaran Paling Lambat (Hari) *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  required
+                  placeholder="7"
+                  value={bulkInvoiceForm.daysUntilDue}
+                  onChange={(e) => setBulkInvoiceForm({ ...bulkInvoiceForm, daysUntilDue: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+                <span className="text-[10px] text-neutral-400 mt-0.5 block">
+                  Batas bayar default: 7 hari setelah terbit tagihan.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Keterangan / Catatan</label>
+                <input
+                  type="text"
+                  value={bulkInvoiceForm.notes}
+                  onChange={(e) => setBulkInvoiceForm({ ...bulkInvoiceForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkInvoiceOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menerbitkan..." : "Terbitkan Tagihan Sekarang"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 3: TAGIHAN KHUSUS PER USER ================= */}
+      {isSingleInvoiceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <h3 className="font-bold text-base text-neutral-900">Buat Tagihan Khusus Per Anggota</h3>
+              <button
+                onClick={() => setIsSingleInvoiceOpen(false)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSingleInvoice} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Pilih Anggota *</label>
+                <select
+                  required
+                  value={singleInvoiceForm.memberId}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    const m = membersList.find((item) => item.memberId === selId);
+                    setSingleInvoiceForm({
+                      ...singleInvoiceForm,
+                      memberId: selId,
+                      amount: m ? String(m.monthlyFee) : singleInvoiceForm.amount,
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                >
+                  <option value="">-- Pilih Anggota --</option>
+                  {membersList.map((m) => (
+                    <option key={m.id} value={m.memberId}>
+                      {m.fullName} ({m.memberId}) - Rp {m.monthlyFee.toLocaleString("id-ID")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Periode Bulan *</label>
+                  <input
+                    type="text"
+                    required
+                    value={singleInvoiceForm.monthPeriod}
+                    onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, monthPeriod: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Nominal (Rp) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={singleInvoiceForm.amount}
+                    onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, amount: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Batas Bayar (Hari dari sekarang)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  required
+                  value={singleInvoiceForm.daysUntilDue}
+                  onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, daysUntilDue: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Keterangan Tagihan</label>
+                <input
+                  type="text"
+                  value={singleInvoiceForm.notes}
+                  onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSingleInvoiceOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menyimpan..." : "Terbitkan Tagihan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 4: PREVIEW & PRINT KTA DIGITAL ================= */}
       {selectedKtaMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
@@ -1278,18 +2057,22 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            {/* Reusable KTA Component */}
             <KtaCard member={selectedKtaMember} showControls={true} />
           </div>
         </div>
       )}
 
-      {/* ================= MODAL 2: TAMBAH ANGGOTA BARU ================= */}
+      {/* ================= MODAL 5: TAMBAH ANGGOTA BARU MANUAL ================= */}
       {isAddMemberOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-neutral-100 mb-4">
-              <h3 className="font-bold text-lg text-neutral-900">Registrasi Anggota Baru</h3>
+              <div>
+                <h3 className="font-bold text-lg text-neutral-900">Registrasi Anggota Baru</h3>
+                <p className="text-[11px] text-neutral-500">
+                  Akun login (membervoca2026x & vocamember2026) akan otomatis ter-generate.
+                </p>
+              </div>
               <button
                 onClick={() => setIsAddMemberOpen(false)}
                 className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
@@ -1392,32 +2175,6 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-neutral-700 mb-1">Golongan Darah</label>
-                  <select
-                    value={newMemberForm.bloodType}
-                    onChange={(e) => setNewMemberForm({ ...newMemberForm, bloodType: e.target.value })}
-                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
-                  >
-                    <option value="O">O</option>
-                    <option value="A">A</option>
-                    <option value="B">B</option>
-                    <option value="AB">AB</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-bold text-neutral-700 mb-1">Kontak Darurat</label>
-                  <input
-                    type="text"
-                    value={newMemberForm.emergencyContact}
-                    onChange={(e) => setNewMemberForm({ ...newMemberForm, emergencyContact: e.target.value })}
-                    placeholder="0812... (Orang Tua)"
-                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
-                  />
-                </div>
-              </div>
-
               <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
                 <button
                   type="button"
@@ -1431,7 +2188,7 @@ export default function AdminDashboardPage() {
                   disabled={isLoading}
                   className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
                 >
-                  {isLoading ? "Menyimpan..." : "Daftarkan & Terbitkan KTA"}
+                  {isLoading ? "Menyimpan..." : "Daftarkan & Generate Akun"}
                 </button>
               </div>
             </form>
@@ -1439,7 +2196,68 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 3: CATAT TRANSAKSI KAS ================= */}
+      {/* ================= MODAL 6: KONVERSI PENDAFTAR KE MEMBER RESMI ================= */}
+      {isConvertLeadOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span>Konversi & Auto-Generate Akun</span>
+              </h3>
+              <button
+                onClick={() => setIsConvertLeadOpen(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConvertLead} className="space-y-4 text-xs">
+              <div className="p-3 bg-purple-50 rounded-xl border border-purple-100 space-y-1">
+                <p className="font-bold text-neutral-900 text-sm">{isConvertLeadOpen.fullName}</p>
+                <p className="text-neutral-600">
+                  No HP: <strong>{isConvertLeadOpen.phoneNumber}</strong>
+                </p>
+                <p className="text-neutral-600 capitalize">
+                  Program: {isConvertLeadOpen.programCategory} • {isConvertLeadOpen.planType || "free_trial"}
+                </p>
+              </div>
+
+              <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200 text-[11px] text-neutral-600 space-y-1">
+                <p className="font-bold text-neutral-800">Ketentuan Akun Ter-Generate Otomatis:</p>
+                <p>1. <strong>Username:</strong> membervoca2026x (nomor urut pendaftar)</p>
+                <p>2. <strong>Password:</strong> vocamember2026</p>
+                <p>3. Uang pendaftaran langsung otomatis masuk ke kas klub.</p>
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConvertLeadOpen(null)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-md shadow-purple-500/20 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                  )}
+                  <span>Buat Akun & Resmikan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 7: CATAT TRANSAKSI KAS ================= */}
       {isAddFinanceOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
@@ -1558,63 +2376,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 4: KONVERSI PENDAFTAR KE MEMBER RESMI ================= */}
-      {isConvertLeadOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
-              <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-purple-600" />
-                <span>Konversi ke Anggota Resmi</span>
-              </h3>
-              <button
-                onClick={() => setIsConvertLeadOpen(null)}
-                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleConvertLead} className="space-y-4 text-xs">
-              <div className="p-3 bg-purple-50 rounded-xl border border-purple-100 space-y-1">
-                <p className="font-bold text-neutral-900 text-sm">{isConvertLeadOpen.fullName}</p>
-                <p className="text-neutral-600">
-                  No HP: <strong>{isConvertLeadOpen.phoneNumber}</strong>
-                </p>
-                <p className="text-neutral-600 capitalize">
-                  Program: {isConvertLeadOpen.programCategory} • {isConvertLeadOpen.planType || "free_trial"}
-                </p>
-              </div>
-
-              <p className="text-neutral-500 text-[11px] leading-relaxed">
-                Menyetujui pendaftar ini akan secara otomatis:
-                <br />1. Menerbitkan ID Anggota baru (contoh: VOCA-2026-...) dan KTA Digital.
-                <br />2. Mencatat iuran perdana ke buku kas klub VOCA.
-              </p>
-
-              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsConvertLeadOpen(null)}
-                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-md shadow-purple-500/20 disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-yellow-300" />}
-                  <span>Resmikan Sekarang</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ================= MODAL 5: TAMBAH USER / STAF ================= */}
+      {/* ================= MODAL 8: TAMBAH USER / STAF ================= */}
       {isAddUserOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">

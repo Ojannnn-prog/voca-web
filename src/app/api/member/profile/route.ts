@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { members, financeTransactions } from "@/db/schema";
+import { members, memberInvoices, financeTransactions } from "@/db/schema";
 import { eq, or, desc } from "drizzle-orm";
 
 export async function GET(request: Request) {
@@ -60,6 +60,13 @@ export async function GET(request: Request) {
       );
     }
 
+    // Ambil daftar tagihan anggota dari member_invoices
+    const memberInvoicesList = await db
+      .select()
+      .from(memberInvoices)
+      .where(eq(memberInvoices.memberId, memberRecord.memberId))
+      .orderBy(desc(memberInvoices.id));
+
     // Ambil riwayat pembayaran dari finance_transactions
     const memberTransactions = await db
       .select()
@@ -70,6 +77,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       member: memberRecord,
+      invoices: memberInvoicesList,
       transactions: memberTransactions,
     });
   } catch (error: any) {

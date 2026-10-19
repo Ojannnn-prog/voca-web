@@ -69,10 +69,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate unique memberId VOCA-2026-xxx
+    // Generate unique memberId & credentials (membervoca<YEAR><x> & vocamember<YEAR>)
+    const { generateMemberCredentials } = await import("@/lib/account-generator");
+    const currentYear = new Date().getFullYear();
     const countResult = await db.select().from(members);
-    const nextNumber = String(countResult.length + 1).padStart(3, "0");
-    const memberId = `VOCA-2026-${nextNumber}`;
+    const sequenceNumber = countResult.length + 1;
+    const { username, password, memberId } = generateMemberCredentials(sequenceNumber, currentYear);
 
     const joinDate = new Date();
     // Masa berlaku default 30 hari ke depan
@@ -82,6 +84,8 @@ export async function POST(request: Request) {
       .insert(members)
       .values({
         memberId,
+        username,
+        password,
         fullName,
         phoneNumber,
         email: email || null,

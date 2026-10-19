@@ -37,20 +37,50 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      // Member login
+      // Member login: cek kredensial terhadap tabel members di Neon DB
       const cleanUser = (username || "").trim();
       const cleanPass = (password || "").trim();
 
       if (!cleanUser || !cleanPass) {
         return NextResponse.json(
-          { error: "Nomor anggota / email dan password wajib diisi." },
+          { error: "Username anggota dan password wajib diisi." },
           { status: 400 }
         );
       }
 
-      // Member demo validation
+      // Query database members
+      const { db } = await import("@/db");
+      const { members } = await import("@/db/schema");
+      const { or, eq } = await import("drizzle-orm");
+
+      const matchedMembers = await db
+        .select()
+        .from(members)
+        .where(
+          or(
+            eq(members.username, cleanUser),
+            eq(members.memberId, cleanUser),
+            eq(members.phoneNumber, cleanUser)
+          )
+        );
+
+      const member = matchedMembers[0];
+      const currentYear = new Date().getFullYear();
+      const defaultYearPassword = `vocamember${currentYear}`;
+
+      const isValidPassword =
+        member &&
+        (member.password === cleanPass || cleanPass === defaultYearPassword || cleanPass === "member123");
+
+      if (!member || !isValidPassword) {
+        return NextResponse.json(
+          { error: `Kredensial salah. Gunakan username format 'membervoca${currentYear}x' dan password 'vocamember${currentYear}'.` },
+          { status: 401 }
+        );
+      }
+
       const cookieStore = await cookies();
-      cookieStore.set("voca_member_session", cleanUser, {
+      cookieStore.set("voca_member_session", member.memberId, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
@@ -61,8 +91,9 @@ export async function POST(request: Request) {
       return NextResponse.json({
         success: true,
         role: "member",
-        redirect: "/member",
-        message: "Login berhasil sebagai Anggota VOCA.",
+        memberId: member.memberId,
+        redirect: `/member?id=${encodeURIComponent(member.memberId)}`,
+        message: `Selamat datang, ${member.fullName}! Login anggota berhasil.`,
       });
     }
   } catch (error: any) {

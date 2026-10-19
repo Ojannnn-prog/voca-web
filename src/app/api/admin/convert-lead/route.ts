@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { trialLeads, members, financeTransactions } from "@/db/schema";
+import { trialLeads, members, financeTransactions, memberInvoices } from "@/db/schema";
+import { generateMemberCredentials, generateInvoiceCode } from "@/lib/account-generator";
 import { eq } from "drizzle-orm";
 
 async function verifyAdminAuth() {
@@ -43,31 +44,52 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Tentukan data keanggotaan
+    // 2. Tentukan data keanggotaan & generate otomatis username & password
+    const currentYear = new Date().getFullYear();
     const countResult = await db.select().from(members);
-    const nextNumber = String(countResult.length + 1).padStart(3, "0");
-    const memberId = `VOCA-2026-${nextNumber}`;
+    const sequenceNumber = countResult.length + 1;
+    const { username, password, memberId } = generateMemberCredentials(sequenceNumber, currentYear);
 
     const joinDate = new Date();
     const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 hari ke depan
 
-    const finalProgramType = programType || (lead.planType === "premium_private" ? "Premium Private Class" : "Reguler Member");
-    const finalSportBranch = sportBranch || (lead.programCategory === "motoric" ? "Fundamental Motorik" : "Renang & Akuatik");
-    const finalMonthlyFee = monthlyFee ? parseInt(monthlyFee, 10) : (finalProgramType === "Premium Private Class" ? 400000 : 347000);
+    const finalProgramType =
+      programType ||
+      (lead.planType === "premium_private"
+        ? "Premium Private Class"
+        : "Reguler Member");
+    const finalSportBranch =
+      sportBranch ||
+      (lead.programCategory === "motoric"
+        ? "Fundamental Motorik"
+        : "Renang & Akuatik");
+    const finalMonthlyFee = monthlyFee
+      ? parseInt(monthlyFee, 10)
+      : finalProgramType === "Premium Private Class"
+      ? 400000
+      : 347000;
 
     // Map age category
     let finalAgeCategory = "Anak-anak";
-    if (lead.ageCategory === "toddler" || (lead.participantAge && lead.participantAge <= 4)) finalAgeCategory = "Balita";
-    else if (lead.ageCategory === "junior" || (lead.participantAge && lead.participantAge >= 13 && lead.participantAge <= 17)) finalAgeCategory = "Remaja";
-    else if (lead.ageCategory === "adult" || (lead.participantAge && lead.participantAge >= 18)) finalAgeCategory = "Dewasa";
+    if (lead.ageCategory === "toddler" || (lead.participantAge && lead.participantAge <= 4))
+      finalAgeCategory = "Balita";
+    else if (
+      lead.ageCategory === "junior" ||
+      (lead.participantAge && lead.participantAge >= 13 && lead.participantAge <= 17)
+    )
+      finalAgeCategory = "Remaja";
+    else if (lead.ageCategory === "adult" || (lead.participantAge && lead.participantAge >= 18))
+      finalAgeCategory = "Dewasa";
     else if (lead.ageCategory === "tni_polri") finalAgeCategory = "Casis TNI/Polri";
     else if (lead.ageCategory === "adaptive") finalAgeCategory = "Terapi Disabilitas";
 
-    // 3. Masukkan ke tabel members
+    // 3. Masukkan ke tabel members dengan username & password ter-generate otomatis
     const [newMember] = await db
       .insert(members)
       .values({
         memberId,
+        username,
+        password,
         fullName: lead.fullName,
         phoneNumber: lead.phoneNumber,
         email: lead.email || null,
@@ -102,7 +124,27 @@ export async function POST(request: Request) {
       createdByUser: "adminvoca",
     });
 
-    // 5. Update status di trial_leads menjadi 'converted'
+    // 5. Terbitkan tagihan perdana di tabel member_invoices dengan status 'paid'
+    const allInvoices = await db.select().from(memberInvoices);
+    const invoiceNumber = generateInvoiceCode(allInvoices.length + 1, now);
+
+    await db.insert(memberInvoices).values({
+      invoiceNumber,
+      memberId,
+      memberName: lead.fullName,
+      monthPeriod: `Oktober ${currentYear}`,
+      amount: finalMonthlyFee,
+      issueDate: now,
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      status: "paid",
+      paymentDate: now,
+      paymentMethod: "Transfer Bank",
+      notes: "Iuran perdana registrasi anggota baru",
+      verifiedByUser: "adminvoca",
+      transactionCode: nextCode,
+    });
+
+    // 6. Update status di trial_leads menjadi 'converted'
     await db
       .update(trialLeads)
       .set({ status: "converted" })
@@ -111,7 +153,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       member: newMember,
-      message: `Pendaftar ${lead.fullName} berhasil resmi dijadikan anggota dengan ID ${memberId} dan iuran Rp ${finalMonthlyFee.toLocaleString("id-ID")} telah tercatat di kas!`,
+      credentials: {
+        username,
+        password,
+        memberId,
+      },
+      message: `Pendaftar ${lead.fullName} resmi menjadi anggota! Akun: ${username} (Password: ${password}), ID: ${memberId}, dan dana Rp ${finalMonthlyFee.toLocaleString("id-ID")} otomatis MASUK ke saldo kas!`,
     });
   } catch (error: any) {
     console.error("Gagal mengonversi lead ke member:", error);
