@@ -14,6 +14,7 @@ export const SITE_CONFIG = {
 
 export const NAV_LINKS = [
   { label: "Program", href: "#programs" },
+  { label: "Membership", href: "#membership" },
   { label: "Jalur Pembinaan", href: "#pathway" },
   { label: "Tentang Kami", href: "#about" },
   { label: "Sports Festival", href: "#festival" },
@@ -220,3 +221,43 @@ export const DEMOGRAPHICS_DATA = [
   { label: "Dewasa & Keluarga (Adult Swimming & Fitness)", percentage: "38%" },
   { label: "Pendampingan Adaptif (Adaptive Movement)", percentage: "29%" },
 ];
+
+export const MEMBERSHIP_DATA = {
+  reguler: {
+    title: "Reguler Member",
+    subtitle: "Pembinaan kelompok kecil interaktif bersama pelatih bersertifikasi resmi VOCA.",
+    categories: [
+      { id: "balita", name: "Balita", age: "1 - 4 Tahun", price: 299000, priceDisplay: "299.000", period: "/bulan" },
+      { id: "anak", name: "Anak-anak", age: "5 - 12 Tahun", price: 347000, priceDisplay: "347.000", period: "/bulan" },
+      { id: "remaja", name: "Remaja", age: "13 - 17 Tahun", price: 399000, priceDisplay: "399.000", period: "/bulan" },
+      { id: "dewasa", name: "Dewasa", age: "18+ Tahun", price: 499000, priceDisplay: "499.000", period: "/bulan" },
+      { id: "terapi_lansia", name: "Terapi lansia", age: "Senior / Lansia", price: 498000, priceDisplay: "498.000", period: "/bulan" },
+      { id: "terapi_disabilitas", name: "Terapi disabilitas", age: "Kebutuhan Khusus", price: 597000, priceDisplay: "597.000", period: "/bulan" },
+      { id: "casis_tni_polri", name: "Casis TNI/Polri", age: "Persiapan Fisik", price: 547000, priceDisplay: "547.000", period: "/bulan" },
+    ],
+    benefits: [
+      "Maksimal 3 murid per latihan",
+      "Pelatih berpengalaman",
+      "Interaksi sosial dan kegiatan bersama.",
+      "Evaluasi perkembangan secara berkala.",
+    ],
+  },
+  premium: {
+    title: "Premium Private Class",
+    badge: "1-ON-1 INTENSIVE",
+    subtitle: "Bimbingan privat eksklusif 1-on-1 dengan pelatih berpengalaman dan kurikulum personal.",
+    startingPrice: 400000,
+    startingPriceDisplay: "400.000",
+    period: "Mulai dari / sesi atau paket",
+    benefits: [
+      "Latihan privat satu peserta dengan satu pelatih.",
+      "Pelatih berpengalaman.",
+      "Program latihan personal.",
+      "Jadwal berdasarkan kesepakatan dan ketersediaan.",
+      "Pendampingan lebih intensif.",
+      "Evaluasi individual lebih terperinci.",
+      "Konsultasi perkembangan dengan pelatih.",
+    ],
+  },
+};
+

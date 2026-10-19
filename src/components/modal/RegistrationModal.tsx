@@ -8,19 +8,24 @@ interface RegistrationModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultProgram?: string;
+  defaultPlanType?: "free_trial" | "reguler" | "premium_private" | "consultation";
+  defaultCategory?: string;
 }
 
 export function RegistrationModal({
   isOpen,
   onClose,
   defaultProgram = "swimming",
+  defaultPlanType = "free_trial",
+  defaultCategory = "kids",
 }: RegistrationModalProps) {
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [participantAge, setParticipantAge] = useState("");
   const [programCategory, setProgramCategory] = useState(defaultProgram);
-  const [planType, setPlanType] = useState<"free_trial" | "consultation">("free_trial");
+  const [planType, setPlanType] = useState<"free_trial" | "reguler" | "premium_private" | "consultation">(defaultPlanType);
+  const [ageCategory, setAgeCategory] = useState(defaultCategory);
   const [notes, setNotes] = useState("");
 
   const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +50,7 @@ export function RegistrationModal({
           participantAge: participantAge ? parseInt(participantAge, 10) : null,
           programCategory,
           planType,
+          ageCategory,
           notes,
         }),
       });
@@ -136,30 +142,77 @@ export function RegistrationModal({
                 </p>
               </div>
 
-              {/* Plan Type Selector */}
-              <div className="grid grid-cols-2 gap-2 p-1 bg-neutral-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setPlanType("free_trial")}
-                  className={`py-2 text-xs font-semibold rounded-lg transition ${
-                    planType === "free_trial"
-                      ? "bg-white text-neutral-900 shadow-sm"
-                      : "text-neutral-600 hover:text-neutral-900"
-                  }`}
+              {/* Plan Type Selector (4 Pilihan: Free Trial, Reguler, Premium Private, Konsultasi) */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
+                  Pilihan Paket / Layanan <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-neutral-100 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setPlanType("free_trial")}
+                    className={`py-2 px-2 text-xs font-bold rounded-lg transition text-center ${
+                      planType === "free_trial"
+                        ? "bg-white text-[#5E17EB] shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    }`}
+                  >
+                    Free Trial Class
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanType("reguler")}
+                    className={`py-2 px-2 text-xs font-bold rounded-lg transition text-center ${
+                      planType === "reguler"
+                        ? "bg-white text-[#5E17EB] shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    }`}
+                  >
+                    Reguler Member
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanType("premium_private")}
+                    className={`py-2 px-2 text-xs font-bold rounded-lg transition text-center ${
+                      planType === "premium_private"
+                        ? "bg-white text-[#5E17EB] shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    }`}
+                  >
+                    ✦ Premium Private
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanType("consultation")}
+                    className={`py-2 px-2 text-xs font-bold rounded-lg transition text-center ${
+                      planType === "consultation"
+                        ? "bg-white text-[#5E17EB] shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    }`}
+                  >
+                    Konsultasi Program
+                  </button>
+                </div>
+              </div>
+
+              {/* Kategori Peserta Selector */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Kategori Kelompok Usia / Spesialisasi
+                </label>
+                <select
+                  value={ageCategory}
+                  onChange={(e) => setAgeCategory(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5E17EB]/40 focus:border-[#5E17EB]"
                 >
-                  Free Trial Class
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPlanType("consultation")}
-                  className={`py-2 text-xs font-semibold rounded-lg transition ${
-                    planType === "consultation"
-                      ? "bg-white text-neutral-900 shadow-sm"
-                      : "text-neutral-600 hover:text-neutral-900"
-                  }`}
-                >
-                  Konsultasi Program
-                </button>
+                  <option value="balita">Balita (1 - 4 Tahun) - Rp 299.000/bln</option>
+                  <option value="anak">Anak-anak (5 - 12 Tahun) - Rp 347.000/bln</option>
+                  <option value="remaja">Remaja (13 - 17 Tahun) - Rp 399.000/bln</option>
+                  <option value="dewasa">Dewasa (18+ Tahun) - Rp 499.000/bln</option>
+                  <option value="terapi_lansia">Terapi Lansia (Senior) - Rp 498.000/bln</option>
+                  <option value="terapi_disabilitas">Terapi Disabilitas - Rp 597.000/bln</option>
+                  <option value="casis_tni_polri">Casis TNI / POLRI - Rp 547.000/bln</option>
+                </select>
               </div>
 
               {errorMessage && (

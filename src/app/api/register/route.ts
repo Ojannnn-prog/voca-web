@@ -12,6 +12,7 @@ export async function POST(request: Request) {
       participantAge,
       programCategory,
       planType,
+      ageCategory,
       notes,
     } = body;
 
@@ -22,6 +23,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const calculatedAge = participantAge ? Number(participantAge) : null;
+    let finalAgeCategory = ageCategory;
+    if (!finalAgeCategory && calculatedAge) {
+      if (calculatedAge <= 4) finalAgeCategory = "toddler";
+      else if (calculatedAge <= 12) finalAgeCategory = "kids";
+      else if (calculatedAge <= 17) finalAgeCategory = "junior";
+      else finalAgeCategory = "adult";
+    }
+
     // Insert record into Neon Database via Drizzle ORM
     const inserted = await db
       .insert(trialLeads)
@@ -29,7 +39,8 @@ export async function POST(request: Request) {
         fullName,
         phoneNumber,
         email: email || null,
-        participantAge: participantAge ? Number(participantAge) : null,
+        participantAge: calculatedAge,
+        ageCategory: finalAgeCategory || "kids",
         programCategory,
         planType: planType || "free_trial",
         notes: notes || null,
