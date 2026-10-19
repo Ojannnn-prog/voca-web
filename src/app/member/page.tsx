@@ -274,7 +274,7 @@ export default function MemberPortalPage() {
                         2. Gunakan QR Code pada kartu untuk verifikasi presensi kegiatan latihan dan kejuaraan.
                       </p>
                       <p>
-                        3. <em>"Every Movement Matters — From First Steps to Great Achievements."</em>
+                        3. <em>&ldquo;Every Movement Matters — From First Steps to Great Achievements.&rdquo;</em>
                       </p>
                     </div>
                     <div className="pt-2 border-t border-white/10 flex justify-between items-end text-[9px]">

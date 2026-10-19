@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { VocaLogo } from "@/components/common/VocaLogo";
@@ -44,26 +44,7 @@ export default function AdminDashboardPage() {
   const [isLoadingLeads, setIsLoadingLeads] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
 
-  // Check auth on load
-  useEffect(() => {
-    async function checkAuth() {
-      try {
-        const res = await fetch("/api/auth/me");
-        const data = await res.json();
-        if (data.isAdmin) {
-          setIsAuthenticated(true);
-          fetchLeads();
-        } else {
-          router.push("/login?role=admin&redirect=/admin");
-        }
-      } catch (err) {
-        router.push("/login?role=admin&redirect=/admin");
-      }
-    }
-    checkAuth();
-  }, [router]);
-
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     setIsLoadingLeads(true);
     try {
       const res = await fetch("/api/admin/leads");
@@ -76,7 +57,26 @@ export default function AdminDashboardPage() {
     } finally {
       setIsLoadingLeads(false);
     }
-  };
+  }, []);
+
+  // Check auth on load
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch("/api/auth/me");
+        const data = await res.json();
+        if (data.isAdmin) {
+          setIsAuthenticated(true);
+          fetchLeads();
+        } else {
+          router.push("/login?role=admin&redirect=/admin");
+        }
+      } catch {
+        router.push("/login?role=admin&redirect=/admin");
+      }
+    }
+    checkAuth();
+  }, [router, fetchLeads]);
 
   const handleUpdateStatus = async (id: number, status: string) => {
     setActionLoadingId(id);

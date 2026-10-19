@@ -18,9 +18,9 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
     <>
       <header
         id="navbar"
-        className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-8 py-3 sm:py-4 transition-all duration-300"
+        className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-6 md:px-8 py-3 transition-all duration-300 w-full"
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="w-full flex items-center justify-between gap-2 sm:gap-4">
           {/* ================= 1. BRAND LOGO (KIRI) ================= */}
           <Link
             href="/"
@@ -36,10 +36,10 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
           </Link>
 
           {/* ================= 2. PERSISTENT FLOATING WHITE CAPSULE PILL (TENGAH) ================= */}
-          {/* Persis sesuai foto acuan: kapsul putih melayang di seluruh seksi */}
+          {/* Kapsul putih melayang di tengah: tampil dari layar lg ke atas dengan ukuran fleksibel tanpa overflow */}
           <nav
             id="nav-pill"
-            className="hidden lg:flex items-center space-x-6 xl:space-x-8 px-8 py-3 bg-white/95 backdrop-blur-md rounded-full shadow-lg shadow-black/8 border border-neutral-200/90 text-sm font-semibold transition-all duration-300 hover:shadow-xl shrink-0"
+            className="hidden lg:flex items-center space-x-3.5 xl:space-x-6 px-5 py-2.5 xl:px-7 xl:py-2.5 bg-white/95 backdrop-blur-md rounded-full shadow-lg shadow-black/8 border border-neutral-200/90 text-xs xl:text-sm font-semibold transition-all duration-300 hover:shadow-xl shrink-0"
           >
             {NAV_LINKS.map((item) => {
               const isRegistration = item.href === "#pendaftaran" || item.isSpecial;
@@ -66,11 +66,11 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
           </nav>
 
           {/* ================= 3. RIGHT ACTIONS: LOGIN & SPECIAL CTA ================= */}
-          <div className="flex items-center space-x-2.5 sm:space-x-3.5 shrink-0">
-            {/* Tombol Masuk / Login (Menuju /login dengan pilihan Admin / Member) */}
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+            {/* Tombol Masuk / Login (Desktop & Tablet) */}
             <Link
               href="/login"
-              className={`inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full transition-all border ${
+              className={`hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-full transition-all border shrink-0 ${
                 isDarkMode
                   ? "bg-white/10 text-white border-white/20 hover:bg-white/20"
                   : "bg-white text-neutral-800 border-neutral-200 hover:bg-neutral-50 shadow-sm"
@@ -81,28 +81,29 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
               <span>Masuk</span>
             </Link>
 
-            {/* CTA DAFTAR KHUSUS (High Contrast, Ultra-Clickable, Sangat Mudah Diklik) */}
+            {/* CTA DAFTAR KHUSUS (Responsive text, tidak akan terpotong / truncated) */}
             <button
               id="nav-cta"
               onClick={onOpenRegister}
-              className="group relative inline-flex items-center gap-2 bg-[#5E17EB] hover:bg-[#4b11bd] active:bg-[#3b08a3] text-white text-xs sm:text-sm font-bold px-5 sm:px-6 py-2.5 sm:py-2.5 rounded-full shadow-md shadow-[#5E17EB]/25 hover:shadow-xl hover:shadow-[#5E17EB]/40 transform hover:scale-105 active:scale-95 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-[#5E17EB]/30 min-h-[42px]"
+              className="group relative inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-[#5E17EB] hover:bg-[#4b11bd] active:bg-[#3b08a3] text-white text-xs sm:text-sm font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-md shadow-[#5E17EB]/25 hover:shadow-xl hover:shadow-[#5E17EB]/40 transform hover:scale-105 active:scale-95 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-[#5E17EB]/30 shrink-0 whitespace-nowrap"
               aria-label="Buka Formulir Pendaftaran Trial Class"
             >
-              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse" />
-              <span>Daftar Sekarang</span>
+              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
+              <span className="hidden md:inline">Daftar Sekarang</span>
+              <span className="md:hidden">Daftar</span>
             </button>
 
             {/* Mobile Menu Toggle Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`lg:hidden p-2.5 rounded-full border transition-all ${
+              className={`lg:hidden p-2 sm:p-2.5 rounded-full border transition-all shrink-0 ${
                 isDarkMode
                   ? "text-white bg-white/10 border-white/20"
                   : "text-neutral-800 bg-white border-neutral-200 shadow-sm"
               }`}
               aria-label="Buka Menu Navigasi"
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Menu className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
           </div>
         </div>
@@ -110,7 +111,7 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
 
       {/* ================= MOBILE NAVIGATION DRAWER ================= */}
       {mobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-white/95 backdrop-blur-md pt-24 px-6 flex flex-col justify-between pb-8 lg:hidden animate-fadeIn">
+        <div className="fixed inset-0 z-40 bg-white/95 backdrop-blur-md pt-20 px-6 flex flex-col justify-between pb-8 lg:hidden animate-fadeIn">
           {/* Main Links */}
           <div className="flex flex-col space-y-3">
             <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">

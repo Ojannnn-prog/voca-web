@@ -17,7 +17,7 @@ export function StorySection() {
               Setiap Gerakan Memiliki Makna
             </h2>
             <p className="text-xs sm:text-sm text-neutral-500 font-medium italic">
-              "Every Great Journey Begins with a Single Movement."
+              &ldquo;Every Great Journey Begins with a Single Movement.&rdquo;
             </p>
           </div>
 
