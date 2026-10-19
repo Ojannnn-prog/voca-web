@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/db";
 import { financeTransactions } from "@/db/schema";
+import { generateTransactionCode, getSafeNextTransactionSequence } from "@/lib/account-generator";
 import { desc, eq } from "drizzle-orm";
 
 async function verifyAdminAuth() {
@@ -10,7 +11,7 @@ async function verifyAdminAuth() {
   return session?.value === "authenticated_admin";
 }
 
-// GET: Mengambil pembukuan kas & ringkasan saldo keuangan
+// 1. GET: Mengambil pembukuan kas & ringkasan saldo keuangan
 export async function GET() {
   const isAuthorized = await verifyAdminAuth();
   if (!isAuthorized) {
@@ -59,14 +60,11 @@ export async function GET() {
   }
 }
 
-// POST: Catat transaksi pemasukan atau pengeluaran baru
+// 2. POST: Catat transaksi pemasukan atau pengeluaran baru (Anti-Collision Sequence)
 export async function POST(request: Request) {
   const isAuthorized = await verifyAdminAuth();
   if (!isAuthorized) {
-    return NextResponse.json(
-      { error: "Akses ditolak." },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Akses ditolak." }, { status: 401 });
   }
 
   try {
@@ -96,11 +94,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate kode transaksi TRX-YYYYMM-xxx
+    // Generate kode transaksi TRX-YYYYMM-xxx yang dijamin unik
     const now = new Date();
-    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
     const allTrx = await db.select().from(financeTransactions);
-    const nextCode = `TRX-${yearMonth}-${String(allTrx.length + 1).padStart(3, "0")}`;
+    const seq = getSafeNextTransactionSequence(allTrx);
+    const nextCode = generateTransactionCode(seq, now);
 
     const [newTransaction] = await db
       .insert(financeTransactions)
@@ -111,7 +109,7 @@ export async function POST(request: Request) {
         amount: parsedAmount,
         memberId: memberId || null,
         paymentMethod: paymentMethod || "Transfer Bank",
-        description,
+        description: description.trim(),
         transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
         createdByUser: "adminvoca",
       })
@@ -131,7 +129,64 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE: Hapus transaksi kas jika ada kekeliruan input
+// 3. PATCH: Edit transaksi kas
+export async function PATCH(request: Request) {
+  const isAuthorized = await verifyAdminAuth();
+  if (!isAuthorized) {
+    return NextResponse.json({ error: "Akses ditolak." }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json();
+    const {
+      id,
+      type,
+      category,
+      amount,
+      memberId,
+      paymentMethod,
+      description,
+      transactionDate,
+    } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "ID transaksi wajib disertakan." }, { status: 400 });
+    }
+
+    const updateFields: any = {};
+    if (type !== undefined) updateFields.type = type;
+    if (category !== undefined) updateFields.category = category;
+    if (amount !== undefined) updateFields.amount = parseInt(amount, 10);
+    if (memberId !== undefined) updateFields.memberId = memberId || null;
+    if (paymentMethod !== undefined) updateFields.paymentMethod = paymentMethod;
+    if (description !== undefined) updateFields.description = description.trim();
+    if (transactionDate !== undefined) updateFields.transactionDate = new Date(transactionDate);
+
+    const [updated] = await db
+      .update(financeTransactions)
+      .set(updateFields)
+      .where(eq(financeTransactions.id, parseInt(id, 10)))
+      .returning();
+
+    if (!updated) {
+      return NextResponse.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      transaction: updated,
+      message: `Transaksi ${updated.transactionCode} berhasil diperbarui.`,
+    });
+  } catch (error: any) {
+    console.error("Gagal update transaksi kas:", error);
+    return NextResponse.json(
+      { error: "Gagal memperbarui transaksi.", details: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// 4. DELETE: Hapus transaksi kas
 export async function DELETE(request: Request) {
   const isAuthorized = await verifyAdminAuth();
   if (!isAuthorized) {

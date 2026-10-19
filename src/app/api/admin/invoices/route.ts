@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/db";
 import { memberInvoices, members, financeTransactions } from "@/db/schema";
-import { generateInvoiceCode } from "@/lib/account-generator";
+import {
+  generateInvoiceCode,
+  generateTransactionCode,
+  getSafeNextInvoiceSequence,
+  getSafeNextTransactionSequence,
+} from "@/lib/account-generator";
 import { desc, eq, and } from "drizzle-orm";
 
 async function verifyAdminAuth() {
@@ -62,7 +67,7 @@ export async function POST(request: Request) {
     const { action, monthPeriod, dueDate, memberId, amount, notes } = body;
 
     const allInvoices = await db.select().from(memberInvoices);
-    let sequenceCounter = allInvoices.length + 1;
+    let sequenceCounter = getSafeNextInvoiceSequence(allInvoices);
 
     // Default due date: 7 hari setelah hari ini jika tidak ditentukan
     const targetDueDate = dueDate
@@ -180,11 +185,11 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, status, paymentMethod } = body;
+    const { id, status, paymentMethod, amount, monthPeriod, dueDate, notes } = body;
 
-    if (!id || !status) {
+    if (!id) {
       return NextResponse.json(
-        { error: "ID tagihan dan status baru wajib disertakan." },
+        { error: "ID tagihan wajib disertakan." },
         { status: 400 }
       );
     }
@@ -199,24 +204,25 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Tagihan tidak ditemukan." }, { status: 404 });
     }
 
+    const nextStatus = status || invoice.status;
     let linkedTrxCode = invoice.transactionCode;
 
     // 2. KETIKA DIUBAH MENJADI 'PAID' (LUNAS):
-    if (status === "paid" && invoice.status !== "paid") {
+    if (nextStatus === "paid" && invoice.status !== "paid") {
       const now = new Date();
-      const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
       const allTrx = await db.select().from(financeTransactions);
-      linkedTrxCode = `TRX-${yearMonth}-${String(allTrx.length + 1).padStart(3, "0")}`;
+      const trxSeq = getSafeNextTransactionSequence(allTrx);
+      linkedTrxCode = generateTransactionCode(trxSeq, now);
 
       // OTOMATIS CATAT PEMASUKAN KAS (Saldo bertambah)
       await db.insert(financeTransactions).values({
         transactionCode: linkedTrxCode,
         type: "income",
         category: "Iuran Bulanan Member",
-        amount: invoice.amount,
+        amount: amount ? parseInt(amount, 10) : invoice.amount,
         memberId: invoice.memberId,
         paymentMethod: paymentMethod || invoice.paymentMethod || "Transfer Bank",
-        description: `Pembayaran ${invoice.invoiceNumber} (${invoice.monthPeriod}) a/n ${invoice.memberName}`,
+        description: `Pembayaran ${invoice.invoiceNumber} (${monthPeriod || invoice.monthPeriod}) a/n ${invoice.memberName}`,
         transactionDate: now,
         createdByUser: "adminvoca",
       });
@@ -231,9 +237,9 @@ export async function PATCH(request: Request) {
         .where(eq(members.memberId, invoice.memberId));
     }
 
-    // 3. JIKA DIBATALKAN / DIUBAH DARI 'PAID' KE 'UNPAID':
+    // 3. JIKA DIBATALKAN / DIUBAH DARI 'PAID' KE 'UNPAID' / 'PENDING':
     // Hapus mutasi transaksi kas agar saldo tidak bertambah ganda / tetap akurat
-    if (status !== "paid" && invoice.status === "paid" && invoice.transactionCode) {
+    if (nextStatus !== "paid" && invoice.status === "paid" && invoice.transactionCode) {
       await db
         .delete(financeTransactions)
         .where(eq(financeTransactions.transactionCode, invoice.transactionCode));
@@ -241,15 +247,22 @@ export async function PATCH(request: Request) {
     }
 
     // 4. Update data tagihan
+    const updateFields: any = {
+      status: nextStatus,
+      paymentDate: nextStatus === "paid" ? (invoice.paymentDate || new Date()) : invoice.paymentDate,
+      verifiedByUser: nextStatus === "paid" ? "adminvoca" : null,
+      transactionCode: linkedTrxCode,
+      paymentMethod: paymentMethod || invoice.paymentMethod,
+    };
+
+    if (amount !== undefined) updateFields.amount = parseInt(amount, 10);
+    if (monthPeriod !== undefined) updateFields.monthPeriod = monthPeriod;
+    if (dueDate !== undefined) updateFields.dueDate = new Date(dueDate);
+    if (notes !== undefined) updateFields.notes = notes;
+
     const [updatedInvoice] = await db
       .update(memberInvoices)
-      .set({
-        status,
-        paymentDate: status === "paid" ? new Date() : invoice.paymentDate,
-        verifiedByUser: status === "paid" ? "adminvoca" : null,
-        transactionCode: linkedTrxCode,
-        paymentMethod: paymentMethod || invoice.paymentMethod,
-      })
+      .set(updateFields)
       .where(eq(memberInvoices.id, parseInt(id, 10)))
       .returning();
 
@@ -257,9 +270,9 @@ export async function PATCH(request: Request) {
       success: true,
       invoice: updatedInvoice,
       message:
-        status === "paid"
-          ? `Tagihan ${invoice.invoiceNumber} diverifikasi LUNAS. Dana sebesar Rp ${invoice.amount.toLocaleString("id-ID")} otomatis MASUK ke saldo kas klub!`
-          : `Status tagihan ${invoice.invoiceNumber} diperbarui menjadi ${status.toUpperCase()}.`,
+        nextStatus === "paid"
+          ? `Tagihan ${invoice.invoiceNumber} diverifikasi LUNAS. Dana sebesar Rp ${updatedInvoice.amount.toLocaleString("id-ID")} otomatis MASUK ke saldo kas klub!`
+          : `Data tagihan ${invoice.invoiceNumber} berhasil diperbarui (Status: ${nextStatus.toUpperCase()}).`,
     });
   } catch (error: any) {
     console.error("Gagal update status tagihan:", error);

@@ -23,7 +23,6 @@ import {
   Sparkles,
   Plus,
   Search,
-  Printer,
   Calendar,
   CreditCard,
   UserCheck,
@@ -39,6 +38,10 @@ import {
   Send,
   Copy,
   CheckCheck,
+  Edit2,
+  Edit3,
+  Info,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Lead {
@@ -122,6 +125,21 @@ interface SystemUser {
   createdAt: string;
 }
 
+interface Toast {
+  id: number;
+  type: "success" | "error" | "info" | "warning";
+  title: string;
+  message: string;
+}
+
+interface ConfirmModalProps {
+  title: string;
+  message: string;
+  confirmText?: string;
+  isDanger?: boolean;
+  onConfirm: () => Promise<void> | void;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
@@ -152,9 +170,32 @@ export default function AdminDashboardPage() {
   const [invoiceFilter, setInvoiceFilter] = useState("all");
   const [financeFilter, setFinanceFilter] = useState("all");
 
-  // Modals
+  // ================= NOTIFICATION TOAST & CONFIRM MODAL STATES =================
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalProps | null>(null);
+
+  const showToast = useCallback(
+    (type: "success" | "error" | "info" | "warning", title: string, message: string) => {
+      const id = Date.now() + Math.random();
+      setToasts((prev) => [...prev, { id, type, title, message }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4000);
+    },
+    []
+  );
+
+  const dismissToast = (id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // Modals - View & Action
   const [selectedKtaMember, setSelectedKtaMember] = useState<Member | null>(null);
   const [selectedProofInvoice, setSelectedProofInvoice] = useState<Invoice | null>(null);
+  const [selectedLeadDetail, setSelectedLeadDetail] = useState<Lead | null>(null);
+
+  // Modals - Create
+  const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [isAddFinanceOpen, setIsAddFinanceOpen] = useState(false);
   const [financeModalType, setFinanceModalType] = useState<"income" | "expense">("income");
@@ -162,6 +203,13 @@ export default function AdminDashboardPage() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isBulkInvoiceOpen, setIsBulkInvoiceOpen] = useState(false);
   const [isSingleInvoiceOpen, setIsSingleInvoiceOpen] = useState(false);
+
+  // Modals - Edit / Update (Complete CRUD)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
+  const [editingFinance, setEditingFinance] = useState<FinanceTransaction | null>(null);
+  const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
 
   // Success Notification for Auto-Generated Credentials
   const [generatedAccountSuccess, setGeneratedAccountSuccess] = useState<{
@@ -173,6 +221,18 @@ export default function AdminDashboardPage() {
   } | null>(null);
 
   const [copiedText, setCopiedText] = useState(false);
+
+  // Form States - Add Lead
+  const [newLeadForm, setNewLeadForm] = useState({
+    fullName: "",
+    phoneNumber: "",
+    email: "",
+    participantAge: "",
+    ageCategory: "kids",
+    programCategory: "swimming",
+    planType: "free_trial",
+    notes: "",
+  });
 
   // Form States - Add Member
   const [newMemberForm, setNewMemberForm] = useState({
@@ -257,10 +317,11 @@ export default function AdminDashboardPage() {
       if (dataUsers.success) setSystemUsersList(dataUsers.users || []);
     } catch (err) {
       console.error("Gagal sinkronisasi data admin:", err);
+      showToast("error", "Koneksi Terganggu", "Gagal menyinkronkan data terbaru dengan server.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   // Auth check
   useEffect(() => {
@@ -281,7 +342,50 @@ export default function AdminDashboardPage() {
     checkAuth();
   }, [router, fetchAllData]);
 
-  // Lead Status Updater
+  // Tab switcher with notification
+  const handleTabSwitch = (tabId: "dashboard" | "applicants" | "members" | "invoices" | "finance" | "users", label: string) => {
+    setActiveTab(tabId);
+    showToast("info", "Navigasi Menu", `Beralih ke tab: ${label}`);
+  };
+
+  // ================= 1. LEADS CRUD HANDLERS =================
+
+  // Create Lead Manual
+  const handleAddLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/admin/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newLeadForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsAddLeadOpen(false);
+        setNewLeadForm({
+          fullName: "",
+          phoneNumber: "",
+          email: "",
+          participantAge: "",
+          ageCategory: "kids",
+          programCategory: "swimming",
+          planType: "free_trial",
+          notes: "",
+        });
+        await fetchAllData();
+        showToast("success", "Pendaftar Tersimpan", data.message || "Data pendaftar baru berhasil masuk.");
+      } else {
+        showToast("error", "Gagal Menambahkan", data.error || "Gagal menyimpan pendaftar.");
+      }
+    } catch (err: any) {
+      showToast("error", "Kesalahan Server", err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update Lead Status (Quick)
   const handleUpdateLeadStatus = async (id: number, status: string) => {
     setActionLoadingId(id);
     try {
@@ -295,12 +399,65 @@ export default function AdminDashboardPage() {
         setLeads((prev) =>
           prev.map((item) => (item.id === id ? { ...item, status } : item))
         );
+        showToast("success", "Status Pendaftar Diperbarui", `Status diubah menjadi: ${status.toUpperCase()}`);
+      } else {
+        showToast("error", "Gagal Update", data.error || "Gagal memperbarui status.");
       }
     } catch (err) {
-      console.error("Gagal update status lead:", err);
+      showToast("error", "Kesalahan Jaringan", "Gagal update status pendaftar.");
     } finally {
       setActionLoadingId(null);
     }
+  };
+
+  // Edit Lead Full
+  const handleUpdateLeadDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/admin/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingLead),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditingLead(null);
+        await fetchAllData();
+        showToast("success", "Pendaftar Diperbarui", data.message || "Data berhasil disimpan.");
+      } else {
+        showToast("error", "Gagal Edit", data.error || "Gagal memperbarui data pendaftar.");
+      }
+    } catch (err: any) {
+      showToast("error", "Kesalahan Jaringan", err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Delete Lead
+  const handleDeleteLead = (id: number, name: string) => {
+    setConfirmModal({
+      title: "Hapus Pendaftar",
+      message: `Apakah Anda yakin ingin menghapus data pendaftar "${name}"? Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: "Ya, Hapus Pendaftar",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/leads?id=${id}`, { method: "DELETE" });
+          const data = await res.json();
+          if (data.success) {
+            await fetchAllData();
+            showToast("warning", "Pendaftar Dihapus", `Data ${name} berhasil dihapus.`);
+          } else {
+            showToast("error", "Gagal Hapus", data.error || "Gagal menghapus pendaftar.");
+          }
+        } catch {
+          showToast("error", "Kesalahan", "Terjadi kegagalan saat menghapus pendaftar.");
+        }
+      },
+    });
   };
 
   // Convert Lead to Official Member (Auto-generate membervoca2026x & vocamember2026)
@@ -337,15 +494,18 @@ export default function AdminDashboardPage() {
         });
         setIsConvertLeadOpen(null);
         await fetchAllData();
+        showToast("success", "Anggota Resmi Terdaftar", data.message);
       } else {
-        alert(data.error || "Gagal konversi keanggotaan.");
+        showToast("error", "Gagal Konversi", data.error || "Gagal konversi keanggotaan.");
       }
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan.");
+      showToast("error", "Kesalahan", err.message || "Terjadi kesalahan.");
     } finally {
       setIsLoading(false);
     }
   };
+
+  // ================= 2. MEMBERS CRUD HANDLERS =================
 
   // Add Member Manually
   const handleAddMember = async (e: React.FormEvent) => {
@@ -381,76 +541,86 @@ export default function AdminDashboardPage() {
           notes: "",
         });
         await fetchAllData();
+        showToast("success", "Anggota Berhasil Dibuat", data.message);
       } else {
-        alert(data.error || "Gagal menambah anggota.");
+        showToast("error", "Gagal Menambah Anggota", data.error || "Gagal menambah anggota.");
       }
     } catch (err: any) {
-      alert(err.message);
+      showToast("error", "Kesalahan Server", err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Update Member Status / Extend
-  const handleUpdateMember = async (id: number, status?: string, extendMonths?: number) => {
+  // Edit Member Full
+  const handleUpdateMemberProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember) return;
+    setIsLoading(true);
     try {
       const res = await fetch("/api/admin/members", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status, extendMonths }),
+        body: JSON.stringify(editingMember),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditingMember(null);
+        await fetchAllData();
+        showToast("success", "Profil Anggota Diperbarui", data.message);
+      } else {
+        showToast("error", "Gagal Update", data.error || "Gagal memperbarui data.");
+      }
+    } catch (err: any) {
+      showToast("error", "Kesalahan", err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Quick Extend Member Validity
+  const handleExtendMember = async (id: number, months: number, name: string) => {
+    try {
+      const res = await fetch("/api/admin/members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, extendMonths: months }),
       });
       const data = await res.json();
       if (data.success) {
         await fetchAllData();
+        showToast("success", "Masa Aktif Diperpanjang", `Masa aktif ${name} bertambah ${months} bulan.`);
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      showToast("error", "Gagal", "Gagal memperpanjang masa aktif.");
     }
   };
 
   // Delete Member
-  const handleDeleteMember = async (id: number) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus anggota ini?")) return;
-    try {
-      const res = await fetch(`/api/admin/members?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        await fetchAllData();
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  const handleDeleteMember = (id: number, name: string) => {
+    setConfirmModal({
+      title: "Hapus Anggota",
+      message: `Apakah Anda yakin ingin menghapus data anggota "${name}"? Seluruh tagihan terkait anggota ini juga akan dibersihkan.`,
+      confirmText: "Ya, Hapus Anggota",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/members?id=${id}`, { method: "DELETE" });
+          const data = await res.json();
+          if (data.success) {
+            await fetchAllData();
+            showToast("warning", "Anggota Dihapus", `Data anggota ${name} berhasil dihapus.`);
+          } else {
+            showToast("error", "Gagal Hapus", data.error || "Gagal menghapus anggota.");
+          }
+        } catch {
+          showToast("error", "Kesalahan", "Terjadi kesalahan saat menghapus anggota.");
+        }
+      },
+    });
   };
 
-  // Update Invoice Status (LUNAS, PENDING, UNPAID) - Otomatis Mutasi Saldo Kas!
-  const handleUpdateInvoiceStatus = async (
-    id: number,
-    status: "paid" | "pending" | "unpaid",
-    paymentMethod?: string
-  ) => {
-    setActionLoadingId(id);
-    try {
-      const res = await fetch("/api/admin/invoices", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status, paymentMethod }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (selectedProofInvoice && selectedProofInvoice.id === id) {
-          setSelectedProofInvoice(null);
-        }
-        await fetchAllData();
-        alert(data.message);
-      } else {
-        alert(data.error || "Gagal memperbarui status tagihan.");
-      }
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
+  // ================= 3. INVOICES CRUD HANDLERS =================
 
   // Bulk Invoice Generation
   const handleGenerateBulkInvoices = async (e: React.FormEvent) => {
@@ -474,12 +644,12 @@ export default function AdminDashboardPage() {
       if (data.success) {
         setIsBulkInvoiceOpen(false);
         await fetchAllData();
-        alert(data.message);
+        showToast("success", "Tagihan Massal Terbit", data.message);
       } else {
-        alert(data.error || "Gagal menerbitkan tagihan massal.");
+        showToast("error", "Gagal Terbitkan Tagihan", data.error || "Gagal menerbitkan tagihan massal.");
       }
     } catch (err: any) {
-      alert(err.message);
+      showToast("error", "Kesalahan", err.message);
     } finally {
       setIsLoading(false);
     }
@@ -509,30 +679,96 @@ export default function AdminDashboardPage() {
       if (data.success) {
         setIsSingleInvoiceOpen(false);
         await fetchAllData();
-        alert(data.message);
+        showToast("success", "Tagihan Diterbitkan", data.message);
       } else {
-        alert(data.error || "Gagal menerbitkan tagihan.");
+        showToast("error", "Gagal Terbitkan", data.error || "Gagal menerbitkan tagihan.");
       }
     } catch (err: any) {
-      alert(err.message);
+      showToast("error", "Kesalahan", err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update Invoice Status (LUNAS, PENDING, UNPAID) - Otomatis Mutasi Saldo Kas!
+  const handleUpdateInvoiceStatus = async (
+    id: number,
+    status: "paid" | "pending" | "unpaid",
+    paymentMethod?: string
+  ) => {
+    setActionLoadingId(id);
+    try {
+      const res = await fetch("/api/admin/invoices", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status, paymentMethod }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (selectedProofInvoice && selectedProofInvoice.id === id) {
+          setSelectedProofInvoice(null);
+        }
+        await fetchAllData();
+        showToast("success", "Status Tagihan Diperbarui", data.message);
+      } else {
+        showToast("error", "Gagal Verifikasi", data.error || "Gagal memperbarui status tagihan.");
+      }
+    } catch (err: any) {
+      showToast("error", "Kesalahan", err.message);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Edit Invoice Full
+  const handleUpdateInvoiceDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInvoice) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/admin/invoices", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingInvoice),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditingInvoice(null);
+        await fetchAllData();
+        showToast("success", "Tagihan Diperbarui", data.message);
+      } else {
+        showToast("error", "Gagal Edit", data.error || "Gagal update tagihan.");
+      }
+    } catch (err: any) {
+      showToast("error", "Kesalahan", err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   // Delete Invoice
-  const handleDeleteInvoice = async (id: number) => {
-    if (!confirm("Hapus catatan tagihan ini?")) return;
-    try {
-      const res = await fetch(`/api/admin/invoices?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        await fetchAllData();
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  const handleDeleteInvoice = (id: number, invNumber: string) => {
+    setConfirmModal({
+      title: "Hapus Tagihan",
+      message: `Hapus catatan tagihan ${invNumber}? Transaksi kas terkait jika ada tidak akan dihapus otomatis demi kehati-hatian.`,
+      confirmText: "Ya, Hapus Tagihan",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/invoices?id=${id}`, { method: "DELETE" });
+          const data = await res.json();
+          if (data.success) {
+            await fetchAllData();
+            showToast("warning", "Tagihan Dihapus", `Tagihan ${invNumber} berhasil dihapus.`);
+          }
+        } catch {
+          showToast("error", "Kesalahan", "Gagal menghapus tagihan.");
+        }
+      },
+    });
   };
+
+  // ================= 4. FINANCE CRUD HANDLERS =================
 
   // Add Finance Transaction
   const handleAddFinance = async (e: React.FormEvent) => {
@@ -562,30 +798,66 @@ export default function AdminDashboardPage() {
           description: "",
         });
         await fetchAllData();
-        alert(data.message);
+        showToast("success", "Transaksi Kas Tercatat", data.message);
       } else {
-        alert(data.error || "Gagal mencatat transaksi.");
+        showToast("error", "Gagal Catat Transaksi", data.error || "Gagal mencatat transaksi.");
       }
     } catch (err: any) {
-      alert(err.message);
+      showToast("error", "Kesalahan", err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Edit Finance Transaction
+  const handleUpdateFinanceTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFinance) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/admin/finance", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingFinance),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditingFinance(null);
+        await fetchAllData();
+        showToast("success", "Transaksi Diperbarui", data.message);
+      } else {
+        showToast("error", "Gagal Edit", data.error || "Gagal update transaksi.");
+      }
+    } catch (err: any) {
+      showToast("error", "Kesalahan", err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
   // Delete Finance Transaction
-  const handleDeleteFinance = async (id: number) => {
-    if (!confirm("Hapus catatan transaksi ini dari buku kas?")) return;
-    try {
-      const res = await fetch(`/api/admin/finance?id=${id}`, { method: "DELETE" });
-      const data = await res.json();
-      if (data.success) {
-        await fetchAllData();
-      }
-    } catch (err) {
-      console.error(err);
-    }
+  const handleDeleteFinance = (id: number, code: string) => {
+    setConfirmModal({
+      title: "Hapus Transaksi Kas",
+      message: `Hapus catatan transaksi ${code} dari buku kas resmi? Saldo kas akan berkurang atau bertambah kembali sesuai mutasi.`,
+      confirmText: "Ya, Hapus Transaksi",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/finance?id=${id}`, { method: "DELETE" });
+          const data = await res.json();
+          if (data.success) {
+            await fetchAllData();
+            showToast("warning", "Transaksi Dihapus", `Transaksi ${code} berhasil dihapus.`);
+          }
+        } catch {
+          showToast("error", "Kesalahan", "Gagal menghapus transaksi.");
+        }
+      },
+    });
   };
+
+  // ================= 5. USERS CRUD HANDLERS =================
 
   // Add System User
   const handleAddUser = async (e: React.FormEvent) => {
@@ -609,20 +881,69 @@ export default function AdminDashboardPage() {
           specialty: "Pelatih Renang",
         });
         await fetchAllData();
-        alert(data.message);
+        showToast("success", "Akun Staf Ditambahkan", data.message);
       } else {
-        alert(data.error || "Gagal menambah user.");
+        showToast("error", "Gagal Menambah Staf", data.error || "Gagal menambah user.");
       }
     } catch (err: any) {
-      alert(err.message);
+      showToast("error", "Kesalahan", err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Edit User
+  const handleUpdateUserDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingUser),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEditingUser(null);
+        await fetchAllData();
+        showToast("success", "Akun Diperbarui", data.message);
+      } else {
+        showToast("error", "Gagal Edit", data.error || "Gagal update akun.");
+      }
+    } catch (err: any) {
+      showToast("error", "Kesalahan", err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Delete User
+  const handleDeleteUser = (id: number, name: string) => {
+    setConfirmModal({
+      title: "Hapus Akun Pengguna",
+      message: `Hapus akun staf / pelatih "${name}"? Pengguna tidak akan dapat login lagi.`,
+      confirmText: "Ya, Hapus Akun",
+      isDanger: true,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin/users?id=${id}`, { method: "DELETE" });
+          const data = await res.json();
+          if (data.success) {
+            await fetchAllData();
+            showToast("warning", "Akun Dihapus", `Akun ${name} berhasil dihapus.`);
+          }
+        } catch {
+          showToast("error", "Kesalahan", "Gagal menghapus akun.");
+        }
+      },
+    });
+  };
+
   // Logout
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
+    showToast("info", "Keluar Sesi", "Anda telah keluar dari panel administrator.");
     router.push("/login?role=admin");
     router.refresh();
   };
@@ -653,20 +974,20 @@ export default function AdminDashboardPage() {
     return (
       m.fullName.toLowerCase().includes(q) ||
       m.memberId.toLowerCase().includes(q) ||
-      m.phoneNumber.includes(q) ||
-      (m.username && m.username.toLowerCase().includes(q))
+      (m.username && m.username.toLowerCase().includes(q)) ||
+      m.phoneNumber.includes(q)
     );
   });
 
   // Filtered Invoices
-  const filteredInvoices = invoices.filter((i) => {
-    if (invoiceFilter === "unpaid") return i.status === "unpaid";
-    if (invoiceFilter === "pending") return i.status === "pending";
-    if (invoiceFilter === "paid") return i.status === "paid";
+  const filteredInvoices = invoices.filter((inv) => {
+    if (invoiceFilter === "unpaid") return inv.status === "unpaid";
+    if (invoiceFilter === "pending") return inv.status === "pending";
+    if (invoiceFilter === "paid") return inv.status === "paid";
     return true;
   });
 
-  // Filtered Transactions
+  // Filtered Finance Transactions
   const filteredTransactions = transactions.filter((t) => {
     if (financeFilter === "income") return t.type === "income";
     if (financeFilter === "expense") return t.type === "expense";
@@ -678,7 +999,88 @@ export default function AdminDashboardPage() {
   const pendingInvoicesCount = invoices.filter((i) => i.status === "pending").length;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-neutral-900 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#F8FAFC] text-neutral-900 flex flex-col md:flex-row relative">
+      {/* ================= FLOATING TOAST NOTIFICATIONS CONTAINER ================= */}
+      <div className="fixed top-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto p-4 rounded-2xl shadow-xl border backdrop-blur-md transition-all duration-300 animate-slideIn flex items-start gap-3 ${
+              toast.type === "success"
+                ? "bg-emerald-950/90 text-white border-emerald-500/40"
+                : toast.type === "error"
+                ? "bg-rose-950/90 text-white border-rose-500/40"
+                : toast.type === "warning"
+                ? "bg-amber-950/90 text-white border-amber-500/40"
+                : "bg-slate-900/90 text-white border-blue-500/40"
+            }`}
+          >
+            {toast.type === "success" && <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />}
+            {toast.type === "error" && <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />}
+            {toast.type === "warning" && <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />}
+            {toast.type === "info" && <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />}
+
+            <div className="flex-1 text-xs">
+              <p className="font-bold text-sm tracking-tight">{toast.title}</p>
+              <p className="text-white/80 mt-0.5 leading-snug">{toast.message}</p>
+            </div>
+
+            <button
+              onClick={() => dismissToast(toast.id)}
+              className="text-white/50 hover:text-white p-1 rounded-md transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* ================= CONFIRMATION MODAL ALERT ================= */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-[28px] max-w-md w-full p-6 shadow-2xl border border-neutral-100 space-y-4">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-neutral-900">{confirmModal.title}</h3>
+                <p className="text-xs text-neutral-500">Konfirmasi Tindakan CMS</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-neutral-600 leading-relaxed bg-neutral-50 p-3.5 rounded-2xl border border-neutral-100">
+              {confirmModal.message}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2.5 rounded-xl border border-neutral-200 text-xs font-bold text-neutral-600 hover:bg-neutral-50 transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const act = confirmModal.onConfirm;
+                  setConfirmModal(null);
+                  await act();
+                }}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white transition shadow-sm ${
+                  confirmModal.isDanger
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : "bg-[#5E17EB] hover:bg-[#4d10c7]"
+                }`}
+              >
+                {confirmModal.confirmText || "Konfirmasi"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= SIDEBAR ================= */}
       <aside className="w-full md:w-64 bg-white border-r border-neutral-200/80 p-5 sm:p-6 flex flex-col justify-between shrink-0 shadow-sm">
         <div className="space-y-6">
@@ -703,7 +1105,7 @@ export default function AdminDashboardPage() {
               return (
                 <button
                   key={nav.id}
-                  onClick={() => setActiveTab(nav.id as any)}
+                  onClick={() => handleTabSwitch(nav.id as any, nav.label)}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition text-left ${
                     isActive
                       ? "bg-[#5E17EB] text-white shadow-md shadow-purple-500/15"
@@ -778,7 +1180,10 @@ export default function AdminDashboardPage() {
 
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
-              onClick={fetchAllData}
+              onClick={() => {
+                fetchAllData();
+                showToast("info", "Segarkan Data", "Data CMS berhasil disinkronkan kembali.");
+              }}
               disabled={isLoading}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-neutral-200 bg-white text-xs font-bold text-neutral-700 hover:bg-neutral-50 shadow-sm transition disabled:opacity-50"
             >
@@ -786,6 +1191,18 @@ export default function AdminDashboardPage() {
               <span>Segarkan Data</span>
             </button>
 
+            {/* Tombol Tambah Pendaftar Manual */}
+            {activeTab === "applicants" && (
+              <button
+                onClick={() => setIsAddLeadOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md shadow-purple-500/20 transition active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambah Pendaftar Manual</span>
+              </button>
+            )}
+
+            {/* Tombol Tambah Anggota Manual */}
             {activeTab === "members" && (
               <button
                 onClick={() => setIsAddMemberOpen(true)}
@@ -796,6 +1213,7 @@ export default function AdminDashboardPage() {
               </button>
             )}
 
+            {/* Tombol Tagihan */}
             {activeTab === "invoices" && (
               <div className="flex items-center gap-2">
                 <button
@@ -815,6 +1233,7 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
+            {/* Tombol Keuangan */}
             {activeTab === "finance" && (
               <div className="flex items-center gap-2">
                 <button
@@ -840,6 +1259,7 @@ export default function AdminDashboardPage() {
               </div>
             )}
 
+            {/* Tombol User Staf */}
             {activeTab === "users" && (
               <button
                 onClick={() => setIsAddUserOpen(true)}
@@ -859,44 +1279,37 @@ export default function AdminDashboardPage() {
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-500/30 text-yellow-300 text-[11px] font-bold border border-yellow-300/30">
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>Akun Anggota Berhasil Ter-Generate Otomatis!</span>
+                  <span>Akun Anggota Berhasil Dibuat Otomatis!</span>
                 </div>
                 <h3 className="text-xl font-bold tracking-tight">
-                  Kredensial Login Anggota: {generatedAccountSuccess.fullName}
+                  Kredensial Login: {generatedAccountSuccess.fullName}
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
-                  <div className="bg-black/30 p-3 rounded-xl border border-white/10">
-                    <span className="text-neutral-400 block text-[10px] uppercase font-bold">Username</span>
-                    <strong className="font-mono text-base text-yellow-300 select-all">
-                      {generatedAccountSuccess.username}
-                    </strong>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs font-mono">
+                  <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                    <span className="text-white/60 block text-[10px]">USERNAME ANGGOTA:</span>
+                    <strong className="text-yellow-300 text-sm">{generatedAccountSuccess.username}</strong>
                   </div>
-                  <div className="bg-black/30 p-3 rounded-xl border border-white/10">
-                    <span className="text-neutral-400 block text-[10px] uppercase font-bold">Password</span>
-                    <strong className="font-mono text-base text-white select-all">
-                      {generatedAccountSuccess.password}
-                    </strong>
+                  <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                    <span className="text-white/60 block text-[10px]">PASSWORD RESMI:</span>
+                    <strong className="text-emerald-300 text-sm">{generatedAccountSuccess.password}</strong>
                   </div>
-                  <div className="bg-black/30 p-3 rounded-xl border border-white/10">
-                    <span className="text-neutral-400 block text-[10px] uppercase font-bold">ID Anggota</span>
-                    <strong className="font-mono text-base text-cyan-300 select-all">
-                      {generatedAccountSuccess.memberId}
-                    </strong>
+                  <div className="bg-white/10 p-2.5 rounded-xl border border-white/10">
+                    <span className="text-white/60 block text-[10px]">NOMOR KTA MEMBER:</span>
+                    <strong className="text-white text-sm">{generatedAccountSuccess.memberId}</strong>
                   </div>
                 </div>
               </div>
-
               <button
                 onClick={() => setGeneratedAccountSuccess(null)}
-                className="p-1.5 text-white/60 hover:text-white rounded-full hover:bg-white/10"
+                className="text-white/60 hover:text-white p-1 rounded-full transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between flex-wrap gap-2 text-xs">
-              <span className="text-neutral-300 text-[11px]">
-                Kirim informasi akun ke orang tua peserta via WhatsApp:
+            <div className="mt-4 pt-4 border-t border-white/15 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <span className="text-white/80">
+                Kirim informasi login ini kepada orang tua agar dapat masuk ke Portal Anggota.
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -905,6 +1318,7 @@ export default function AdminDashboardPage() {
                     const text = `Halo Bapak/Ibu ${generatedAccountSuccess.fullName},\n\nSelamat! Akun Portal Anggota VOCA Anda telah aktif.\n\n📌 Username: ${generatedAccountSuccess.username}\n🔑 Password: ${generatedAccountSuccess.password}\n🆔 ID Member: ${generatedAccountSuccess.memberId}\n\nSilakan login di website VOCA: https://voca-athletics.com/login untuk cek jadwal latihan, KTA digital, dan status iuran.\n\nSalam,\nAdmin VOCA Athletics`;
                     navigator.clipboard.writeText(text);
                     setCopiedText(true);
+                    showToast("success", "Kredensial Tersalin", "Kredensial akun anggota disalin ke clipboard.");
                     setTimeout(() => setCopiedText(false), 2500);
                   }}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white text-xs font-semibold transition"
@@ -919,6 +1333,7 @@ export default function AdminDashboardPage() {
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={() => showToast("info", "WhatsApp Dibuka", "Mengirim kredensial via WhatsApp.")}
                   className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold shadow-md transition"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -992,10 +1407,10 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="font-bold text-base text-neutral-900">Tagihan & Bukti Masuk</h3>
-                    <p className="text-xs text-neutral-500">Bukti transfer transfer yang perlu dicek</p>
+                    <p className="text-xs text-neutral-500">Bukti transfer yang perlu dicek</p>
                   </div>
                   <button
-                    onClick={() => setActiveTab("invoices")}
+                    onClick={() => handleTabSwitch("invoices", "Tagihan & Bukti Bayar")}
                     className="text-xs font-bold text-[#5E17EB] hover:underline"
                   >
                     Buka Menu Tagihan
@@ -1051,13 +1466,13 @@ export default function AdminDashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="font-bold text-base text-neutral-900">Mutasi Kas Terbaru</h3>
-                    <p className="text-xs text-neutral-500">Otomatis tercatat saat tagihan lunas</p>
+                    <p className="text-xs text-neutral-500">Pemasukan & pengeluaran kas klub</p>
                   </div>
                   <button
-                    onClick={() => setActiveTab("finance")}
+                    onClick={() => handleTabSwitch("finance", "Kas & Keuangan Klub")}
                     className="text-xs font-bold text-[#5E17EB] hover:underline"
                   >
-                    Buku Kas Lengkap
+                    Buka Buku Kas
                   </button>
                 </div>
 
@@ -1066,19 +1481,19 @@ export default function AdminDashboardPage() {
                     <div key={trx.id} className="py-3 flex items-center justify-between">
                       <div>
                         <p className="text-xs font-bold text-neutral-900">{trx.description}</p>
-                        <p className="text-[11px] text-neutral-500">
-                          {trx.category} • {trx.paymentMethod}
+                        <p className="text-[11px] text-neutral-400">
+                          {trx.category} • {new Date(trx.transactionDate).toLocaleDateString("id-ID")}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p
-                          className={`text-xs font-extrabold ${
+                        <span
+                          className={`text-xs font-bold ${
                             trx.type === "income" ? "text-emerald-600" : "text-rose-600"
                           }`}
                         >
                           {trx.type === "income" ? "+" : "-"} Rp {trx.amount.toLocaleString("id-ID")}
-                        </p>
-                        <p className="text-[10px] text-neutral-400 font-mono">{trx.transactionCode}</p>
+                        </span>
+                        <p className="text-[10px] text-neutral-400 capitalize">{trx.paymentMethod}</p>
                       </div>
                     </div>
                   ))}
@@ -1091,12 +1506,12 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* ================= TAB 2: PENDAFTAR BARU (APPLICANTS) ================= */}
+        {/* ================= TAB 2: PENDAFTARAN & TRIAL LEADS ================= */}
         {activeTab === "applicants" && (
-          <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden animate-fadeIn">
-            {/* Filter Pills */}
-            <div className="p-4 sm:p-6 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5">
+          <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden animate-fadeIn space-y-4 p-5 sm:p-6">
+            {/* Filter Bar */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-4 border-b border-neutral-100">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 {[
                   { id: "all", label: `Semua (${leads.length})` },
                   { id: "pending", label: `Menunggu (${pendingLeadsCount})` },
@@ -1105,7 +1520,10 @@ export default function AdminDashboardPage() {
                 ].map((f) => (
                   <button
                     key={f.id}
-                    onClick={() => setLeadFilter(f.id)}
+                    onClick={() => {
+                      setLeadFilter(f.id);
+                      showToast("info", "Filter Pendaftar", `Menampilkan: ${f.label}`);
+                    }}
                     className={`text-xs px-3 py-1.5 rounded-full font-bold transition ${
                       leadFilter === f.id
                         ? "bg-[#5E17EB] text-white"
@@ -1128,7 +1546,7 @@ export default function AdminDashboardPage() {
                     <th className="py-3.5 px-4">Usia / Kategori</th>
                     <th className="py-3.5 px-4">Kontak WhatsApp</th>
                     <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4 text-center">Tindakan Cepat</th>
+                    <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 font-medium">
@@ -1181,37 +1599,45 @@ export default function AdminDashboardPage() {
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                          {/* Detail Pendaftar */}
+                          <button
+                            onClick={() => setSelectedLeadDetail(lead)}
+                            className="p-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 transition"
+                            title="Lihat Detail Lengkap"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Edit Data Pendaftar */}
+                          <button
+                            onClick={() => setEditingLead(lead)}
+                            className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-[#21649D] transition"
+                            title="Edit Data Pendaftar"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Konversi ke Member */}
                           {lead.status !== "converted" && (
                             <button
                               onClick={() => setIsConvertLeadOpen(lead)}
-                              className="flex items-center gap-1 px-3 py-1 rounded-lg bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-[11px] font-bold shadow-sm transition"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-[11px] font-bold shadow-sm transition"
                               title="Terima & Otomatis Buat Akun (membervoca2026x)"
                             >
                               <Sparkles className="w-3 h-3 text-yellow-300" />
-                              <span>Buat Akun Member</span>
+                              <span>Buat Akun</span>
                             </button>
                           )}
-                          {lead.status === "pending" && (
-                            <>
-                              <button
-                                onClick={() => handleUpdateLeadStatus(lead.id, "approved")}
-                                disabled={actionLoadingId === lead.id}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition disabled:opacity-50"
-                                title="Terima Pendaftaran"
-                              >
-                                <Check className="w-3 h-3" />
-                              </button>
-                              <button
-                                onClick={() => handleUpdateLeadStatus(lead.id, "rejected")}
-                                disabled={actionLoadingId === lead.id}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-[11px] font-bold transition disabled:opacity-50"
-                                title="Tolak"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </>
-                          )}
+
+                          {/* Hapus Pendaftar */}
+                          <button
+                            onClick={() => handleDeleteLead(lead.id, lead.fullName)}
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 transition"
+                            title="Hapus Pendaftar"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1263,7 +1689,7 @@ export default function AdminDashboardPage() {
                       <th className="py-3.5 px-4">Iuran / Bulan</th>
                       <th className="py-3.5 px-4">Masa Berlaku</th>
                       <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4 text-center">Aksi & KTA</th>
+                      <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 font-medium">
@@ -1312,15 +1738,24 @@ export default function AdminDashboardPage() {
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             {/* Tombol Lihat & Cetak KTA Digital */}
                             <button
                               onClick={() => setSelectedKtaMember(member)}
-                              className="flex items-center gap-1 px-3 py-1 rounded-lg bg-[#21649D] hover:bg-[#1a4f7c] text-white text-[11px] font-bold shadow-sm transition"
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#21649D] hover:bg-[#1a4f7c] text-white text-[11px] font-bold shadow-sm transition"
                               title="Lihat KTA Digital ISO/IEC 7810"
                             >
                               <CreditCard className="w-3 h-3" />
                               <span>KTA</span>
+                            </button>
+
+                            {/* Tombol Edit Anggota */}
+                            <button
+                              onClick={() => setEditingMember(member)}
+                              className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                              title="Edit Data Anggota"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
                             </button>
 
                             {/* Tombol WhatsApp Kirim Kredensial */}
@@ -1338,16 +1773,16 @@ export default function AdminDashboardPage() {
 
                             {/* Tombol Perpanjang 1 Bulan */}
                             <button
-                              onClick={() => handleUpdateMember(member.id, "active", 1)}
+                              onClick={() => handleExtendMember(member.id, 1, member.fullName)}
                               className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold transition"
                               title="Perpanjang 1 Bulan"
                             >
                               +1 Bln
                             </button>
 
-                            {/* Tombol Hapus */}
+                            {/* Tombol Hapus Anggota */}
                             <button
-                              onClick={() => handleDeleteMember(member.id)}
+                              onClick={() => handleDeleteMember(member.id, member.fullName)}
                               className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 transition"
                               title="Hapus Anggota"
                             >
@@ -1417,7 +1852,10 @@ export default function AdminDashboardPage() {
                   ].map((f) => (
                     <button
                       key={f.id}
-                      onClick={() => setInvoiceFilter(f.id)}
+                      onClick={() => {
+                        setInvoiceFilter(f.id);
+                        showToast("info", "Filter Tagihan", `Menampilkan: ${f.label}`);
+                      }}
                       className={`text-xs px-3 py-1.5 rounded-full font-bold transition ${
                         invoiceFilter === f.id
                           ? "bg-[#5E17EB] text-white"
@@ -1444,23 +1882,21 @@ export default function AdminDashboardPage() {
                       <th className="py-3.5 px-4">Nominal</th>
                       <th className="py-3.5 px-4">Batas Bayar</th>
                       <th className="py-3.5 px-4">Status & Bukti</th>
-                      <th className="py-3.5 px-4 text-center">Aksi Status Admin</th>
+                      <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 font-medium">
                     {filteredInvoices.map((inv) => (
                       <tr key={inv.id} className="hover:bg-neutral-50/80 transition">
-                        <td className="py-3.5 px-4 font-mono font-bold text-neutral-900">
+                        <td className="py-3.5 px-4 font-mono font-bold text-neutral-800">
                           {inv.invoiceNumber}
                         </td>
                         <td className="py-3.5 px-4">
                           <p className="font-bold text-neutral-900">{inv.memberName}</p>
-                          <p className="text-[11px] text-neutral-400 font-mono">{inv.memberId}</p>
+                          <p className="text-[10px] text-neutral-400 font-mono">{inv.memberId}</p>
                         </td>
-                        <td className="py-3.5 px-4 text-neutral-700 font-semibold">
-                          {inv.monthPeriod}
-                        </td>
-                        <td className="py-3.5 px-4 font-extrabold text-sm text-neutral-900">
+                        <td className="py-3.5 px-4 font-semibold text-neutral-700">{inv.monthPeriod}</td>
+                        <td className="py-3.5 px-4 font-extrabold text-neutral-900">
                           Rp {inv.amount.toLocaleString("id-ID")}
                         </td>
                         <td className="py-3.5 px-4 font-mono text-neutral-500">
@@ -1471,7 +1907,7 @@ export default function AdminDashboardPage() {
                           })}
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <span
                               className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                                 inv.status === "paid"
@@ -1491,57 +1927,65 @@ export default function AdminDashboardPage() {
                             {inv.paymentProofUrl && (
                               <button
                                 onClick={() => setSelectedProofInvoice(inv)}
-                                className="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 text-[10px] font-bold border border-blue-200 transition"
-                                title="Buka foto bukti transfer"
+                                className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-blue-50 text-[#21649D] font-bold hover:bg-blue-100 transition"
+                                title="Lihat Foto Bukti Pembayaran"
                               >
                                 <Eye className="w-3 h-3" />
-                                <span>Bukti</span>
+                                <span>Lihat Struk</span>
                               </button>
                             )}
                           </div>
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {/* Tombol Lunas -> Tambah Otomatis ke Kas */}
+                          <div className="flex items-center justify-center gap-1 flex-wrap">
+                            {/* Tombol Cepat Lunas */}
                             {inv.status !== "paid" && (
                               <button
                                 onClick={() => handleUpdateInvoiceStatus(inv.id, "paid")}
                                 disabled={actionLoadingId === inv.id}
-                                className="flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition disabled:opacity-50"
-                                title="Verifikasi Lunas dan Tambah ke Saldo Kas"
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm transition disabled:opacity-50"
+                                title="Setujui LUNAS & Otomatis Tambah Saldo Kas"
                               >
-                                <Check className="w-3 h-3" />
-                                <span>Lunas (Masuk Kas)</span>
+                                Lunas
                               </button>
                             )}
 
-                            {/* Tombol Pending */}
-                            {inv.status !== "pending" && inv.paymentProofUrl && (
+                            {/* Tombol Set Pending */}
+                            {inv.status === "unpaid" && (
                               <button
                                 onClick={() => handleUpdateInvoiceStatus(inv.id, "pending")}
                                 disabled={actionLoadingId === inv.id}
-                                className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 text-[11px] font-bold transition disabled:opacity-50"
-                                title="Tandai Pending"
+                                className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold transition"
+                                title="Ubah status ke Pending"
                               >
                                 Pending
                               </button>
                             )}
 
-                            {/* Tombol Belum Bayar */}
-                            {inv.status !== "unpaid" && (
+                            {/* Tombol Revert to Belum Bayar */}
+                            {inv.status === "paid" && (
                               <button
                                 onClick={() => handleUpdateInvoiceStatus(inv.id, "unpaid")}
                                 disabled={actionLoadingId === inv.id}
-                                className="px-2.5 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[11px] font-bold transition disabled:opacity-50"
-                                title="Kembalikan ke Belum Bayar"
+                                className="px-2 py-1 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[11px] font-bold transition"
+                                title="Batalkan Lunas & Kurangi Saldo Kas Kembali"
                               >
                                 Batal
                               </button>
                             )}
 
-                            {/* Hapus Tagihan */}
+                            {/* Tombol Edit Tagihan */}
                             <button
-                              onClick={() => handleDeleteInvoice(inv.id)}
+                              onClick={() => setEditingInvoice(inv)}
+                              className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                              title="Edit Data Tagihan"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Tombol Hapus Tagihan */}
+                            <button
+                              onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
                               className="p-1 text-neutral-400 hover:text-red-600 transition"
                               title="Hapus Tagihan"
                             >
@@ -1620,7 +2064,10 @@ export default function AdminDashboardPage() {
                   ].map((f) => (
                     <button
                       key={f.id}
-                      onClick={() => setFinanceFilter(f.id)}
+                      onClick={() => {
+                        setFinanceFilter(f.id);
+                        showToast("info", "Filter Kas", `Menampilkan: ${f.label}`);
+                      }}
                       className={`text-xs px-3 py-1.5 rounded-full font-bold transition ${
                         financeFilter === f.id
                           ? "bg-[#5E17EB] text-white"
@@ -1646,7 +2093,7 @@ export default function AdminDashboardPage() {
                       <th className="py-3.5 px-4">Kategori & Keterangan</th>
                       <th className="py-3.5 px-4">Metode Bayar</th>
                       <th className="py-3.5 px-4 text-right">Nominal</th>
-                      <th className="py-3.5 px-4 text-center">Aksi</th>
+                      <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 font-medium">
@@ -1691,13 +2138,25 @@ export default function AdminDashboardPage() {
                           {trx.amount.toLocaleString("id-ID")}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <button
-                            onClick={() => handleDeleteFinance(trx.id)}
-                            className="p-1 text-neutral-400 hover:text-red-600 transition"
-                            title="Hapus transaksi"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Edit Transaksi Kas */}
+                            <button
+                              onClick={() => setEditingFinance(trx)}
+                              className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                              title="Edit Transaksi Kas"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Hapus Transaksi Kas */}
+                            <button
+                              onClick={() => handleDeleteFinance(trx.id, trx.transactionCode)}
+                              className="p-1 text-neutral-400 hover:text-red-600 transition"
+                              title="Hapus transaksi"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1727,6 +2186,7 @@ export default function AdminDashboardPage() {
                     <th className="py-3.5 px-4">Spesialisasi</th>
                     <th className="py-3.5 px-4">Kontak Telepon / Email</th>
                     <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100 font-medium">
@@ -1758,11 +2218,32 @@ export default function AdminDashboardPage() {
                           {user.status === "active" ? "Aktif" : user.status}
                         </span>
                       </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* Edit User */}
+                          <button
+                            onClick={() => setEditingUser(user)}
+                            className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                            title="Edit Data Akun Staf/Pelatih"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Hapus User */}
+                          <button
+                            onClick={() => handleDeleteUser(user.id, user.fullName)}
+                            className="p-1 text-neutral-400 hover:text-red-600 transition"
+                            title="Hapus Pengguna"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                   {systemUsersList.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-neutral-400">
+                      <td colSpan={6} className="py-8 text-center text-neutral-400">
                         Belum ada data staf/pelatih.
                       </td>
                     </tr>
@@ -1774,7 +2255,580 @@ export default function AdminDashboardPage() {
         )}
       </main>
 
-      {/* ================= MODAL 1: PREVIEW BUKTI TRANSFER & VERIFIKASI ================= */}
+      {/* ================= MODAL: DETAIL PENDAFTAR (LEAD) ================= */}
+      {selectedLeadDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900">Detail Pendaftar</h3>
+                <p className="text-[11px] text-neutral-400 font-mono">Ref ID #{selectedLeadDetail.id}</p>
+              </div>
+              <button
+                onClick={() => setSelectedLeadDetail(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-100 space-y-1.5">
+                <p className="font-bold text-sm text-neutral-900">{selectedLeadDetail.fullName}</p>
+                <p className="text-neutral-600">
+                  WhatsApp: <strong className="font-mono text-neutral-900">{selectedLeadDetail.phoneNumber}</strong>
+                </p>
+                <p className="text-neutral-600">Email: {selectedLeadDetail.email || "-"}</p>
+                <p className="text-neutral-600">
+                  Usia: <strong>{selectedLeadDetail.participantAge ? `${selectedLeadDetail.participantAge} Thn` : "-"}</strong> (Kategori: {selectedLeadDetail.ageCategory || "-"})
+                </p>
+                <p className="text-neutral-600">Program: <strong>{selectedLeadDetail.programCategory}</strong> • Paket: <strong>{selectedLeadDetail.planType || "free_trial"}</strong></p>
+                <p className="text-neutral-600">Catatan: {selectedLeadDetail.notes || "Tidak ada catatan."}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-neutral-100">
+              <a
+                href={`https://wa.me/${selectedLeadDetail.phoneNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                  `Halo Bapak/Ibu ${selectedLeadDetail.fullName}, terima kasih telah mendaftar di VOCA Athletics!`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#25D366] text-white text-xs font-bold hover:bg-[#20bd5a] transition"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Chat WhatsApp</span>
+              </a>
+
+              <button
+                onClick={() => setSelectedLeadDetail(null)}
+                className="px-4 py-2 rounded-xl bg-neutral-100 text-neutral-700 text-xs font-bold hover:bg-neutral-200 transition"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: EDIT PENDAFTAR (LEAD) ================= */}
+      {editingLead && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-[#5E17EB]" />
+                <span>Edit Data Pendaftar</span>
+              </h3>
+              <button
+                onClick={() => setEditingLead(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateLeadDetails} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Nama Lengkap *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingLead.fullName}
+                  onChange={(e) => setEditingLead({ ...editingLead, fullName: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">No. WhatsApp *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editingLead.phoneNumber}
+                    onChange={(e) => setEditingLead({ ...editingLead, phoneNumber: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Usia (Tahun)</label>
+                  <input
+                    type="number"
+                    value={editingLead.participantAge || ""}
+                    onChange={(e) =>
+                      setEditingLead({
+                        ...editingLead,
+                        participantAge: e.target.value ? parseInt(e.target.value, 10) : null,
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Kategori Program</label>
+                  <select
+                    value={editingLead.programCategory}
+                    onChange={(e) => setEditingLead({ ...editingLead, programCategory: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  >
+                    <option value="swimming">Renang & Akuatik</option>
+                    <option value="motoric">Fundamental Motorik</option>
+                    <option value="both">Kombinasi (Renang & Motorik)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Status</label>
+                  <select
+                    value={editingLead.status}
+                    onChange={(e) => setEditingLead({ ...editingLead, status: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                  >
+                    <option value="pending">Menunggu (Pending)</option>
+                    <option value="approved">Disetujui</option>
+                    <option value="converted">Sudah Jadi Member</option>
+                    <option value="rejected">Ditolak</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Catatan Tambahan</label>
+                <textarea
+                  rows={2}
+                  value={editingLead.notes || ""}
+                  onChange={(e) => setEditingLead({ ...editingLead, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingLead(null)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: EDIT DATA ANGGOTA (MEMBER) ================= */}
+      {editingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-[#5E17EB]" />
+                  <span>Edit Data Anggota</span>
+                </h3>
+                <p className="text-[11px] font-mono text-[#5E17EB]">{editingMember.memberId}</p>
+              </div>
+              <button
+                onClick={() => setEditingMember(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateMemberProfile} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Nama Lengkap *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingMember.fullName}
+                  onChange={(e) => setEditingMember({ ...editingMember, fullName: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">No. WhatsApp *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editingMember.phoneNumber}
+                    onChange={(e) => setEditingMember({ ...editingMember, phoneNumber: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Iuran / Bulan (Rp) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editingMember.monthlyFee}
+                    onChange={(e) => setEditingMember({ ...editingMember, monthlyFee: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Program</label>
+                  <select
+                    value={editingMember.programType}
+                    onChange={(e) => setEditingMember({ ...editingMember, programType: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  >
+                    <option value="Reguler Member">Reguler Member</option>
+                    <option value="Premium Private Class">Premium Private Class</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Cabang Olahraga</label>
+                  <select
+                    value={editingMember.sportBranch}
+                    onChange={(e) => setEditingMember({ ...editingMember, sportBranch: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  >
+                    <option value="Renang & Akuatik">Renang & Akuatik</option>
+                    <option value="Fundamental Motorik">Fundamental Motorik</option>
+                    <option value="Multi-Sport Atletik">Multi-Sport Atletik</option>
+                    <option value="Persiapan TNI/POLRI">Persiapan TNI/POLRI</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Status Keanggotaan</label>
+                  <select
+                    value={editingMember.status}
+                    onChange={(e) => setEditingMember({ ...editingMember, status: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                  >
+                    <option value="active">Aktif (Active)</option>
+                    <option value="inactive">Nonaktif (Inactive)</option>
+                    <option value="suspended">Ditangguhkan (Suspended)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Kontak Darurat</label>
+                  <input
+                    type="text"
+                    value={editingMember.emergencyContact || ""}
+                    onChange={(e) => setEditingMember({ ...editingMember, emergencyContact: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Catatan</label>
+                <textarea
+                  rows={2}
+                  value={editingMember.notes || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingMember(null)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menyimpan..." : "Simpan Perubahan Anggota"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: EDIT TAGIHAN (INVOICE) ================= */}
+      {editingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-[#5E17EB]" />
+                  <span>Edit Data Tagihan</span>
+                </h3>
+                <p className="text-[11px] font-mono text-neutral-500">{editingInvoice.invoiceNumber}</p>
+              </div>
+              <button
+                onClick={() => setEditingInvoice(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateInvoiceDetails} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Periode Bulan *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingInvoice.monthPeriod}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, monthPeriod: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Nominal (Rp) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editingInvoice.amount}
+                    onChange={(e) => setEditingInvoice({ ...editingInvoice, amount: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Status Tagihan</label>
+                  <select
+                    value={editingInvoice.status}
+                    onChange={(e) => setEditingInvoice({ ...editingInvoice, status: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                  >
+                    <option value="unpaid">Belum Bayar (Unpaid)</option>
+                    <option value="pending">Pending Bukti</option>
+                    <option value="paid">Lunas (Paid - Masuk Kas)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Keterangan / Catatan</label>
+                <input
+                  type="text"
+                  value={editingInvoice.notes || ""}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingInvoice(null)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menyimpan..." : "Simpan Perubahan Tagihan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: EDIT TRANSAKSI KAS (FINANCE) ================= */}
+      {editingFinance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-[#5E17EB]" />
+                  <span>Edit Transaksi Kas</span>
+                </h3>
+                <p className="text-[11px] font-mono text-neutral-500">{editingFinance.transactionCode}</p>
+              </div>
+              <button
+                onClick={() => setEditingFinance(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateFinanceTransaction} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Tipe Transaksi</label>
+                  <select
+                    value={editingFinance.type}
+                    onChange={(e) => setEditingFinance({ ...editingFinance, type: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                  >
+                    <option value="income">Pemasukan (+)</option>
+                    <option value="expense">Pengeluaran (-)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Nominal (Rp) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editingFinance.amount}
+                    onChange={(e) => setEditingFinance({ ...editingFinance, amount: parseInt(e.target.value, 10) || 0 })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Kategori Transaksi *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingFinance.category}
+                  onChange={(e) => setEditingFinance({ ...editingFinance, category: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Keterangan / Deskripsi *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingFinance.description}
+                  onChange={(e) => setEditingFinance({ ...editingFinance, description: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingFinance(null)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menyimpan..." : "Simpan Transaksi Kas"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: EDIT AKUN PENGGUNA (USER) ================= */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900 flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-[#5E17EB]" />
+                  <span>Edit Akun Staf / Pelatih</span>
+                </h3>
+                <p className="text-[11px] font-mono text-neutral-500">@{editingUser.username}</p>
+              </div>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateUserDetails} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Nama Lengkap & Gelar *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingUser.fullName}
+                  onChange={(e) => setEditingUser({ ...editingUser, fullName: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Role / Peran</label>
+                  <select
+                    value={editingUser.role}
+                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                  >
+                    <option value="coach">Pelatih (Coach)</option>
+                    <option value="staff">Staf Sekretariat</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Status</label>
+                  <select
+                    value={editingUser.status}
+                    onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                  >
+                    <option value="active">Aktif</option>
+                    <option value="inactive">Nonaktif</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Spesialisasi</label>
+                <input
+                  type="text"
+                  value={editingUser.specialty || ""}
+                  onChange={(e) => setEditingUser({ ...editingUser, specialty: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menyimpan..." : "Simpan Perubahan Akun"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: PREVIEW BUKTI TRANSFER & VERIFIKASI ================= */}
       {selectedProofInvoice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
@@ -1798,12 +2852,11 @@ export default function AdminDashboardPage() {
             {/* Gambar Bukti Transfer Nyata */}
             <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-200 mb-4 flex items-center justify-center">
               {selectedProofInvoice.paymentProofUrl ? (
-                <Image
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
                   src={selectedProofInvoice.paymentProofUrl}
                   alt={`Bukti Transfer ${selectedProofInvoice.invoiceNumber}`}
-                  fill
-                  unoptimized
-                  className="object-contain"
+                  className="max-h-full object-contain"
                 />
               ) : (
                 <p className="text-neutral-400 text-xs">Belum ada file bukti bayar yang diupload.</p>
@@ -1847,7 +2900,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 2: TERBITKAN TAGIHAN MASSAL ================= */}
+      {/* ================= MODAL: TERBITKAN TAGIHAN MASSAL ================= */}
       {isBulkInvoiceOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
@@ -1895,9 +2948,6 @@ export default function AdminDashboardPage() {
                   onChange={(e) => setBulkInvoiceForm({ ...bulkInvoiceForm, daysUntilDue: e.target.value })}
                   className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
                 />
-                <span className="text-[10px] text-neutral-400 mt-0.5 block">
-                  Batas bayar default: 7 hari setelah terbit tagihan.
-                </span>
               </div>
 
               <div>
@@ -1931,7 +2981,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 3: TAGIHAN KHUSUS PER USER ================= */}
+      {/* ================= MODAL: TAGIHAN KHUSUS PER USER ================= */}
       {isSingleInvoiceOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
@@ -2038,7 +3088,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 4: PREVIEW & PRINT KTA DIGITAL ================= */}
+      {/* ================= MODAL: PREVIEW & PRINT KTA DIGITAL ================= */}
       {selectedKtaMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
@@ -2062,7 +3112,121 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 5: TAMBAH ANGGOTA BARU MANUAL ================= */}
+      {/* ================= MODAL: TAMBAH PENDAFTAR MANUAL ================= */}
+      {isAddLeadOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-neutral-100 mb-4">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900">Tambah Pendaftar Baru Manual</h3>
+                <p className="text-[11px] text-neutral-500">Input pendaftar langsung ke database leads.</p>
+              </div>
+              <button
+                onClick={() => setIsAddLeadOpen(false)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddLead} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Nama Lengkap *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Budi Santoso"
+                  value={newLeadForm.fullName}
+                  onChange={(e) => setNewLeadForm({ ...newLeadForm, fullName: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">No. WhatsApp *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="08123456789"
+                    value={newLeadForm.phoneNumber}
+                    onChange={(e) => setNewLeadForm({ ...newLeadForm, phoneNumber: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Usia Peserta</label>
+                  <input
+                    type="number"
+                    placeholder="Contoh: 8"
+                    value={newLeadForm.participantAge}
+                    onChange={(e) => setNewLeadForm({ ...newLeadForm, participantAge: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Program</label>
+                  <select
+                    value={newLeadForm.programCategory}
+                    onChange={(e) => setNewLeadForm({ ...newLeadForm, programCategory: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  >
+                    <option value="swimming">Renang & Akuatik</option>
+                    <option value="motoric">Fundamental Motorik</option>
+                    <option value="both">Kombinasi Renang & Motorik</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Paket</label>
+                  <select
+                    value={newLeadForm.planType}
+                    onChange={(e) => setNewLeadForm({ ...newLeadForm, planType: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  >
+                    <option value="free_trial">Free Trial Class</option>
+                    <option value="reguler">Reguler Member</option>
+                    <option value="premium_private">Premium Private</option>
+                    <option value="consultation">Konsultasi Gerak</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Catatan</label>
+                <textarea
+                  rows={2}
+                  placeholder="Catatan pendaftar..."
+                  value={newLeadForm.notes}
+                  onChange={(e) => setNewLeadForm({ ...newLeadForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-neutral-100 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddLeadOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-neutral-200 hover:bg-neutral-50 font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-5 py-2 rounded-xl bg-[#5E17EB] text-white font-bold hover:bg-[#4d10c7] shadow-sm disabled:opacity-50"
+                >
+                  {isLoading ? "Menyimpan..." : "Simpan Pendaftar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: TAMBAH ANGGOTA BARU MANUAL ================= */}
       {isAddMemberOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-lg bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100 max-h-[92vh] overflow-y-auto">
@@ -2070,7 +3234,7 @@ export default function AdminDashboardPage() {
               <div>
                 <h3 className="font-bold text-lg text-neutral-900">Registrasi Anggota Baru</h3>
                 <p className="text-[11px] text-neutral-500">
-                  Akun login (membervoca2026x & vocamember2026) akan otomatis ter-generate.
+                  Akun login (membervoca2026x & vocamember2026) akan otomatis ter-generate unik.
                 </p>
               </div>
               <button
@@ -2196,7 +3360,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 6: KONVERSI PENDAFTAR KE MEMBER RESMI ================= */}
+      {/* ================= MODAL: KONVERSI PENDAFTAR KE MEMBER RESMI ================= */}
       {isConvertLeadOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
@@ -2257,7 +3421,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 7: CATAT TRANSAKSI KAS ================= */}
+      {/* ================= MODAL: CATAT TRANSAKSI KAS ================= */}
       {isAddFinanceOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">
@@ -2376,7 +3540,7 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* ================= MODAL 8: TAMBAH USER / STAF ================= */}
+      {/* ================= MODAL: TAMBAH USER / STAF ================= */}
       {isAddUserOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-neutral-100">

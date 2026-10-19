@@ -65,33 +65,21 @@ export function Navbar({ onOpenRegister, isDarkMode = false }: NavbarProps) {
             })}
           </nav>
 
-          {/* ================= 3. RIGHT ACTIONS: LOGIN & SPECIAL CTA ================= */}
+          {/* ================= 3. RIGHT ACTIONS: LOGIN ================= */}
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
-            {/* Tombol Masuk / Login (Desktop & Tablet) */}
+            {/* Tombol Masuk / Login */}
             <Link
               href="/login"
-              className={`hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-full transition-all border shrink-0 ${
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-full transition-all border shrink-0 ${
                 isDarkMode
                   ? "bg-white/10 text-white border-white/20 hover:bg-white/20"
-                  : "bg-white text-neutral-800 border-neutral-200 hover:bg-neutral-50 shadow-sm"
+                  : "bg-white text-[#5E17EB] border-purple-200 hover:bg-purple-50 hover:border-purple-300 shadow-sm"
               }`}
               title="Masuk ke Portal Member atau Panel Admin"
             >
               <LogIn className="w-3.5 h-3.5 text-[#5E17EB]" />
               <span>Masuk</span>
             </Link>
-
-            {/* CTA DAFTAR KHUSUS (Responsive text, tidak akan terpotong / truncated) */}
-            <button
-              id="nav-cta"
-              onClick={onOpenRegister}
-              className="group relative inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-[#5E17EB] hover:bg-[#4b11bd] active:bg-[#3b08a3] text-white text-xs sm:text-sm font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-md shadow-[#5E17EB]/25 hover:shadow-xl hover:shadow-[#5E17EB]/40 transform hover:scale-105 active:scale-95 transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-[#5E17EB]/30 shrink-0 whitespace-nowrap"
-              aria-label="Buka Formulir Pendaftaran Trial Class"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-pulse shrink-0" />
-              <span className="hidden md:inline">Daftar Sekarang</span>
-              <span className="md:hidden">Daftar</span>
-            </button>
 
             {/* Mobile Menu Toggle Button */}
             <button

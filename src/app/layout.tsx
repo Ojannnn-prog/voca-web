@@ -31,6 +31,14 @@ export const metadata: Metadata = {
     "Persiapan TNI POLRI",
     "Renang Adaptif",
   ],
+  icons: {
+    icon: [
+      { url: "/LOGO%20VOCA.svg", type: "image/svg+xml" },
+      { url: "/logo.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/LOGO%20VOCA.svg",
+    apple: "/LOGO%20VOCA.svg",
+  },
 };
 
 export default function RootLayout({

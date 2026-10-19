@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/db";
 import { trialLeads, members, financeTransactions, memberInvoices } from "@/db/schema";
-import { generateMemberCredentials, generateInvoiceCode } from "@/lib/account-generator";
+import {
+  generateMemberCredentials,
+  generateInvoiceCode,
+  generateTransactionCode,
+  getSafeNextMemberSequence,
+  getSafeNextInvoiceSequence,
+  getSafeNextTransactionSequence,
+} from "@/lib/account-generator";
 import { eq } from "drizzle-orm";
 
 async function verifyAdminAuth() {
@@ -44,11 +51,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Tentukan data keanggotaan & generate otomatis username & password
+    // 2. Tentukan data keanggotaan & generate otomatis username & password aman (anti-collision)
     const currentYear = new Date().getFullYear();
-    const countResult = await db.select().from(members);
-    const sequenceNumber = countResult.length + 1;
-    const { username, password, memberId } = generateMemberCredentials(sequenceNumber, currentYear);
+    const allExistingMembers = await db.select().from(members);
+    let sequenceNumber = getSafeNextMemberSequence(allExistingMembers);
+
+    let creds = generateMemberCredentials(sequenceNumber, currentYear);
+    let collision = allExistingMembers.some(
+      (m) => m.memberId === creds.memberId || m.username === creds.username
+    );
+    while (collision) {
+      sequenceNumber++;
+      creds = generateMemberCredentials(sequenceNumber, currentYear);
+      collision = allExistingMembers.some(
+        (m) => m.memberId === creds.memberId || m.username === creds.username
+      );
+    }
+    const { username, password, memberId } = creds;
 
     const joinDate = new Date();
     const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 hari ke depan
@@ -108,9 +127,9 @@ export async function POST(request: Request) {
 
     // 4. Catat otomatis ke buku kas keuangan
     const now = new Date();
-    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
     const allTrx = await db.select().from(financeTransactions);
-    const nextCode = `TRX-${yearMonth}-${String(allTrx.length + 1).padStart(3, "0")}`;
+    const trxSeq = getSafeNextTransactionSequence(allTrx);
+    const nextCode = generateTransactionCode(trxSeq, now);
 
     await db.insert(financeTransactions).values({
       transactionCode: nextCode,
@@ -126,7 +145,8 @@ export async function POST(request: Request) {
 
     // 5. Terbitkan tagihan perdana di tabel member_invoices dengan status 'paid'
     const allInvoices = await db.select().from(memberInvoices);
-    const invoiceNumber = generateInvoiceCode(allInvoices.length + 1, now);
+    const invSeq = getSafeNextInvoiceSequence(allInvoices);
+    const invoiceNumber = generateInvoiceCode(invSeq, now);
 
     await db.insert(memberInvoices).values({
       invoiceNumber,

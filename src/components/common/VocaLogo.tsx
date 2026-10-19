@@ -70,46 +70,16 @@ export function VocaLogo({
 
   return (
     <div className={cn("inline-flex items-center gap-2.5 select-none", className)}>
-      {/* VORTEX ATHLETE SVG ICON (Konsep 3) */}
-      <svg
-        viewBox="0 0 100 100"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className={cn(iconSizes[size], "shrink-0 transition-transform duration-300 hover:rotate-45")}
-        aria-label="VOCA Vortex Icon"
-      >
-        {/* Blade 1 (Top / Merah) */}
-        <path
-          d="M 50 8 C 68 8, 85 20, 90 38 C 84 28, 72 22, 58 24 C 52 25, 46 28, 42 32 C 45 22, 48 14, 50 8 Z"
-          fill={redBlade}
-        />
-        {/* Blade 2 (Right / Kuning) */}
-        <path
-          d="M 92 50 C 92 68, 80 85, 62 90 C 72 84, 78 72, 76 58 C 75 52, 72 46, 68 42 C 78 45, 86 48, 92 50 Z"
-          fill={yellowBlade}
-        />
-        {/* Blade 3 (Bottom / Hijau) */}
-        <path
-          d="M 50 92 C 32 92, 15 80, 10 62 C 16 72, 28 78, 42 76 C 48 75, 54 72, 58 68 C 55 78, 52 86, 50 92 Z"
-          fill={greenBlade}
-        />
-        {/* Blade 4 (Left / Biru) */}
-        <path
-          d="M 8 50 C 8 32, 20 15, 38 10 C 28 16, 22 28, 24 42 C 25 48, 28 54, 32 58 C 22 55, 14 52, 8 50 Z"
-          fill={blueBlade}
-        />
-
-        {/* Central Athletic Figure (Letter 'V' with spread arms & head) */}
-        <g>
-          {/* Circular Head */}
-          <circle cx="50" cy="35" r="4.8" fill={athleteColor} />
-          {/* Athletic V-Body with raised energetic arms */}
-          <path
-            d="M 37 44 C 41 46, 46 54, 50 67 C 54 54, 59 46, 63 44 C 61 49, 56 61, 50 74 C 44 61, 39 49, 37 44 Z"
-            fill={athleteColor}
-          />
-        </g>
-      </svg>
+      {/* OFFICIAL LOGO VOCA.SVG ICON */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/LOGO%20VOCA.svg"
+        alt="VOCA Official Logo"
+        className={cn(
+          iconSizes[size],
+          "shrink-0 object-contain transition-transform duration-300 hover:scale-105"
+        )}
+      />
 
       {/* Typography: "voca" (Fredoka) + "VORTEX COMMUNITY OF ATHLETICS" */}
       {variant === "full" && (
