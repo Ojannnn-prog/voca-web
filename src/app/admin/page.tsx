@@ -12,6 +12,7 @@ import {
   FileCheck,
   DollarSign,
   ArrowLeft,
+  ArrowRight,
   Check,
   X,
   Phone,
@@ -73,6 +74,68 @@ function parseMonthPeriod(periodStr: string) {
   const month = MONTH_NAMES.includes(parts[0]) ? parts[0] : "Oktober";
   const year = parts[1] || "2026";
   return { month, year };
+}
+
+function toDateInputValue(d?: Date | string | null): string {
+  if (!d) return "";
+  try {
+    const date = new Date(d);
+    if (isNaN(date.getTime())) return "";
+    return date.toISOString().split("T")[0];
+  } catch {
+    return "";
+  }
+}
+
+function formatDisplayDate(dateStr?: string | null): string {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return String(dateStr);
+    return d.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return String(dateStr);
+  }
+}
+
+function getDefaultDateForPeriod(monthStr: string, yearStr: string): string {
+  const monthIdx = MONTH_NAMES.indexOf(monthStr);
+  const m = monthIdx >= 0 ? String(monthIdx + 1).padStart(2, "0") : "10";
+  const y = yearStr || "2026";
+  return `${y}-${m}-01`;
+}
+
+function computeDueDateFromIssue(issueDateStr: string, days: number): string {
+  if (!issueDateStr) return "";
+  try {
+    const parts = issueDateStr.split("-").map(Number);
+    if (parts.length < 3 || isNaN(parts[0])) return issueDateStr;
+    const [y, m, d] = parts;
+    const offset = days > 1 ? days - 1 : 0;
+    const date = new Date(y, m - 1, d + offset);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  } catch {
+    return issueDateStr;
+  }
+}
+
+function computeDaysBetween(issueDateStr: string, dueDateStr: string): number {
+  if (!issueDateStr || !dueDateStr) return 7;
+  try {
+    const p1 = issueDateStr.split("-").map(Number);
+    const p2 = dueDateStr.split("-").map(Number);
+    if (p1.length < 3 || p2.length < 3) return 7;
+    const date1 = new Date(p1[0], p1[1] - 1, p1[2]);
+    const date2 = new Date(p2[0], p2[1] - 1, p2[2]);
+    const diff = Math.round((date2.getTime() - date1.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(1, diff + 1);
+  } catch {
+    return 7;
+  }
 }
 
 interface Lead {
@@ -299,7 +362,9 @@ export default function AdminDashboardPage() {
   // Form States - Bulk Invoice
   const [bulkInvoiceForm, setBulkInvoiceForm] = useState({
     monthPeriod: "Oktober 2026",
+    issueDate: "2026-10-01",
     daysUntilDue: "7",
+    dueDate: "2026-10-07",
     notes: "Tagihan Iuran Bulanan Reguler VOCA",
   });
 
@@ -307,10 +372,16 @@ export default function AdminDashboardPage() {
   const [singleInvoiceForm, setSingleInvoiceForm] = useState({
     memberId: "",
     monthPeriod: "Oktober 2026",
-    amount: "347000",
+    issueDate: "2026-10-01",
     daysUntilDue: "7",
+    dueDate: "2026-10-07",
+    amount: "347000",
     notes: "Tagihan Iuran Khusus",
   });
+
+  // Pencarian Tagihan & Pemilihan Anggota Tagihan
+  const [invoiceSearchQuery, setInvoiceSearchQuery] = useState("");
+  const [memberInvoiceSearch, setMemberInvoiceSearch] = useState("");
 
   // Form States - Add User
   const [userForm, setUserForm] = useState({
@@ -665,16 +736,15 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const days = parseInt(bulkInvoiceForm.daysUntilDue, 10) || 7;
-      const targetDueDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "bulk",
           monthPeriod: bulkInvoiceForm.monthPeriod,
-          dueDate: targetDueDate.toISOString(),
+          issueDate: bulkInvoiceForm.issueDate,
+          dueDate: bulkInvoiceForm.dueDate,
+          daysUntilDue: bulkInvoiceForm.daysUntilDue,
           notes: bulkInvoiceForm.notes,
         }),
       });
@@ -696,11 +766,12 @@ export default function AdminDashboardPage() {
   // Single Invoice Creation
   const handleCreateSingleInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!singleInvoiceForm.memberId) {
+      showToast("error", "Pilih Anggota", "Silakan cari dan pilih anggota terlebih dahulu.");
+      return;
+    }
     setIsLoading(true);
     try {
-      const days = parseInt(singleInvoiceForm.daysUntilDue, 10) || 7;
-      const targetDueDate = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-
       const res = await fetch("/api/admin/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -709,7 +780,9 @@ export default function AdminDashboardPage() {
           memberId: singleInvoiceForm.memberId,
           monthPeriod: singleInvoiceForm.monthPeriod,
           amount: singleInvoiceForm.amount,
-          dueDate: targetDueDate.toISOString(),
+          issueDate: singleInvoiceForm.issueDate,
+          dueDate: singleInvoiceForm.dueDate,
+          daysUntilDue: singleInvoiceForm.daysUntilDue,
           notes: singleInvoiceForm.notes,
         }),
       });
@@ -1006,12 +1079,36 @@ export default function AdminDashboardPage() {
     );
   });
 
-  // Filtered Invoices
+  // Filtered Invoices (Filter Status & Search Bar)
   const filteredInvoices = invoices.filter((inv) => {
-    if (invoiceFilter === "unpaid") return inv.status === "unpaid";
-    if (invoiceFilter === "pending") return inv.status === "pending";
-    if (invoiceFilter === "paid") return inv.status === "paid";
+    // 1. Status Filter
+    if (invoiceFilter === "unpaid" && inv.status !== "unpaid") return false;
+    if (invoiceFilter === "pending" && inv.status !== "pending") return false;
+    if (invoiceFilter === "paid" && inv.status !== "paid") return false;
+
+    // 2. Search Query (Nama, Member ID, No Tagihan, Bulan)
+    if (invoiceSearchQuery.trim()) {
+      const q = invoiceSearchQuery.toLowerCase();
+      const matchName = (inv.memberName || "").toLowerCase().includes(q);
+      const matchId = (inv.memberId || "").toLowerCase().includes(q);
+      const matchInvNo = (inv.invoiceNumber || "").toLowerCase().includes(q);
+      const matchPeriod = (inv.monthPeriod || "").toLowerCase().includes(q);
+      if (!matchName && !matchId && !matchInvNo && !matchPeriod) return false;
+    }
+
     return true;
+  });
+
+  // Filtered Members for Single Invoice Selection
+  const filteredMembersForInvoice = membersList.filter((m) => {
+    if (!memberInvoiceSearch.trim()) return true;
+    const q = memberInvoiceSearch.toLowerCase();
+    return (
+      (m.fullName || "").toLowerCase().includes(q) ||
+      (m.memberId || "").toLowerCase().includes(q) ||
+      (m.username || "").toLowerCase().includes(q) ||
+      (m.phoneNumber || "").includes(q)
+    );
   });
 
   // Filtered Finance Transactions (Tipe & Periode Kustom)
@@ -2027,8 +2124,8 @@ export default function AdminDashboardPage() {
 
             {/* Filter Pills */}
             <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden">
-              <div className="p-4 sm:p-5 border-b border-neutral-100 flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-1.5">
+              <div className="p-4 sm:p-5 border-b border-neutral-100 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   {[
                     { id: "all", label: `Semua (${invoices.length})` },
                     { id: "pending", label: `Pending Bukti (${pendingInvoicesCount})` },
@@ -2051,9 +2148,27 @@ export default function AdminDashboardPage() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-neutral-500">
-                  Klik <strong>Verifikasi Lunas</strong> untuk otomatis menambah saldo kas
-                </p>
+
+                {/* Search Bar Tagihan */}
+                <div className="relative min-w-[240px] flex-1 sm:flex-initial">
+                  <input
+                    type="text"
+                    value={invoiceSearchQuery}
+                    onChange={(e) => setInvoiceSearchQuery(e.target.value)}
+                    placeholder="Cari tagihan (Nama, ID, No Tagihan)..."
+                    className="w-full pl-8 pr-7 py-1.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:border-[#5E17EB]"
+                  />
+                  <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                  {invoiceSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setInvoiceSearchQuery("")}
+                      className="absolute right-2 top-2 text-neutral-400 hover:text-black"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Invoices Table */}
@@ -2084,12 +2199,13 @@ export default function AdminDashboardPage() {
                         <td className="py-3.5 px-4 font-extrabold text-neutral-900">
                           Rp {inv.amount.toLocaleString("id-ID")}
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-neutral-500">
-                          {new Date(inv.dueDate).toLocaleDateString("id-ID", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
+                        <td className="py-3.5 px-4">
+                          <p className="font-bold text-neutral-800 font-mono">
+                            {formatDisplayDate(inv.dueDate)}
+                          </p>
+                          <p className="text-[10px] text-neutral-400 font-mono">
+                            Terbit: {formatDisplayDate(inv.issueDate)}
+                          </p>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-1.5">
@@ -2970,6 +3086,50 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Tanggal Terbit Tagihan</label>
+                  <input
+                    type="date"
+                    value={toDateInputValue(editingInvoice.issueDate)}
+                    onChange={(e) => {
+                      const newIssue = e.target.value;
+                      const curDue = toDateInputValue(editingInvoice.dueDate);
+                      const days = computeDaysBetween(toDateInputValue(editingInvoice.issueDate), curDue);
+                      const newDue = computeDueDateFromIssue(newIssue, days);
+                      setEditingInvoice({
+                        ...editingInvoice,
+                        issueDate: newIssue,
+                        dueDate: newDue,
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Batas Bayar (Jatuh Tempo) *</label>
+                  <input
+                    type="date"
+                    value={toDateInputValue(editingInvoice.dueDate)}
+                    onChange={(e) => setEditingInvoice({ ...editingInvoice, dueDate: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold text-[#5E17EB]"
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Preview Helper */}
+              <div className="p-2.5 bg-purple-50/70 rounded-xl border border-purple-200/60 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-neutral-700">
+                  <Calendar className="w-3.5 h-3.5 text-[#5E17EB]" />
+                  <span>Terbit: <strong>{formatDisplayDate(editingInvoice.issueDate)}</strong></span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                <div className="flex items-center gap-1.5 text-neutral-700">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Jatuh Tempo: <strong className="text-purple-700">{formatDisplayDate(editingInvoice.dueDate)}</strong></span>
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-neutral-700 mb-1">Keterangan / Catatan</label>
                 <input
@@ -3279,7 +3439,16 @@ export default function AdminDashboardPage() {
                     value={parseMonthPeriod(bulkInvoiceForm.monthPeriod).month}
                     onChange={(e) => {
                       const { year } = parseMonthPeriod(bulkInvoiceForm.monthPeriod);
-                      setBulkInvoiceForm({ ...bulkInvoiceForm, monthPeriod: `${e.target.value} ${year}` });
+                      const newPeriod = `${e.target.value} ${year}`;
+                      const defaultIssue = getDefaultDateForPeriod(e.target.value, year);
+                      const days = parseInt(bulkInvoiceForm.daysUntilDue, 10) || 7;
+                      const newDue = computeDueDateFromIssue(defaultIssue, days);
+                      setBulkInvoiceForm({
+                        ...bulkInvoiceForm,
+                        monthPeriod: newPeriod,
+                        issueDate: defaultIssue,
+                        dueDate: newDue,
+                      });
                     }}
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
                   >
@@ -3291,7 +3460,16 @@ export default function AdminDashboardPage() {
                     value={parseMonthPeriod(bulkInvoiceForm.monthPeriod).year}
                     onChange={(e) => {
                       const { month } = parseMonthPeriod(bulkInvoiceForm.monthPeriod);
-                      setBulkInvoiceForm({ ...bulkInvoiceForm, monthPeriod: `${month} ${e.target.value}` });
+                      const newPeriod = `${month} ${e.target.value}`;
+                      const defaultIssue = getDefaultDateForPeriod(month, e.target.value);
+                      const days = parseInt(bulkInvoiceForm.daysUntilDue, 10) || 7;
+                      const newDue = computeDueDateFromIssue(defaultIssue, days);
+                      setBulkInvoiceForm({
+                        ...bulkInvoiceForm,
+                        monthPeriod: newPeriod,
+                        issueDate: defaultIssue,
+                        dueDate: newDue,
+                      });
                     }}
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
                   >
@@ -3302,20 +3480,86 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">
+                    Tanggal Terbit Tagihan *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={bulkInvoiceForm.issueDate}
+                    onChange={(e) => {
+                      const newIssue = e.target.value;
+                      const days = parseInt(bulkInvoiceForm.daysUntilDue, 10) || 7;
+                      const newDue = computeDueDateFromIssue(newIssue, days);
+                      setBulkInvoiceForm({
+                        ...bulkInvoiceForm,
+                        issueDate: newIssue,
+                        dueDate: newDue,
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">
+                    Batas Bayar (Hari) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    required
+                    placeholder="7"
+                    value={bulkInvoiceForm.daysUntilDue}
+                    onChange={(e) => {
+                      const days = parseInt(e.target.value, 10) || 1;
+                      const newDue = computeDueDateFromIssue(bulkInvoiceForm.issueDate, days);
+                      setBulkInvoiceForm({
+                        ...bulkInvoiceForm,
+                        daysUntilDue: e.target.value,
+                        dueDate: newDue,
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-neutral-700 mb-1">
-                  Batas Pembayaran Paling Lambat (Hari) *
+                  Tanggal Jatuh Tempo (Batas Terakhir Pembayaran) *
                 </label>
                 <input
-                  type="number"
-                  min="1"
-                  max="30"
+                  type="date"
                   required
-                  placeholder="7"
-                  value={bulkInvoiceForm.daysUntilDue}
-                  onChange={(e) => setBulkInvoiceForm({ ...bulkInvoiceForm, daysUntilDue: e.target.value })}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                  value={bulkInvoiceForm.dueDate}
+                  onChange={(e) => {
+                    const newDue = e.target.value;
+                    const diffDays = computeDaysBetween(bulkInvoiceForm.issueDate, newDue);
+                    setBulkInvoiceForm({
+                      ...bulkInvoiceForm,
+                      dueDate: newDue,
+                      daysUntilDue: String(diffDays),
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold text-[#5E17EB]"
                 />
+              </div>
+
+              {/* Dynamic Preview Banner */}
+              <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200/60 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-neutral-700">
+                  <Calendar className="w-3.5 h-3.5 text-[#5E17EB]" />
+                  <span>Terbit: <strong>{formatDisplayDate(bulkInvoiceForm.issueDate)}</strong></span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                <div className="flex items-center gap-1.5 text-neutral-700">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Jatuh Tempo: <strong className="text-purple-700">{formatDisplayDate(bulkInvoiceForm.dueDate)}</strong></span>
+                  <span className="text-[10px] text-neutral-500">({bulkInvoiceForm.daysUntilDue} hari)</span>
+                </div>
               </div>
 
               <div>
@@ -3364,29 +3608,106 @@ export default function AdminDashboardPage() {
             </div>
 
             <form onSubmit={handleCreateSingleInvoice} className="space-y-4 text-xs">
+              {/* FITUR PENCARIAN ANGGOTA DENGAN SEARCH BUTTON (PENGGANTI DROPDOWN MANUAL) */}
               <div>
-                <label className="block font-bold text-neutral-700 mb-1">Pilih Anggota *</label>
-                <select
-                  required
-                  value={singleInvoiceForm.memberId}
-                  onChange={(e) => {
-                    const selId = e.target.value;
-                    const m = membersList.find((item) => item.memberId === selId);
-                    setSingleInvoiceForm({
-                      ...singleInvoiceForm,
-                      memberId: selId,
-                      amount: m ? String(m.monthlyFee) : singleInvoiceForm.amount,
-                    });
-                  }}
-                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
-                >
-                  <option value="">-- Pilih Anggota --</option>
-                  {membersList.map((m) => (
-                    <option key={m.id} value={m.memberId}>
-                      {m.fullName} ({m.memberId}) - Rp {m.monthlyFee.toLocaleString("id-ID")}
-                    </option>
-                  ))}
-                </select>
+                <label className="block font-bold text-neutral-700 mb-1">
+                  Pilih Anggota Yang Ditagihkan *
+                </label>
+                {singleInvoiceForm.memberId ? (
+                  // Kartu Anggota Terpilih
+                  (() => {
+                    const selectedM = membersList.find((m) => m.memberId === singleInvoiceForm.memberId);
+                    return (
+                      <div className="p-3 bg-purple-50/80 rounded-2xl border border-purple-200 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-[#5E17EB] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                            {selectedM?.fullName?.substring(0, 2).toUpperCase() || "MB"}
+                          </div>
+                          <div>
+                            <p className="font-bold text-neutral-900 text-xs">{selectedM?.fullName || singleInvoiceForm.memberId}</p>
+                            <p className="text-[10px] text-neutral-500 font-mono">
+                              {singleInvoiceForm.memberId} • {selectedM?.programType || "Reguler"} • Rp {selectedM?.monthlyFee?.toLocaleString("id-ID") || "0"}/bln
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSingleInvoiceForm({ ...singleInvoiceForm, memberId: "" });
+                            setMemberInvoiceSearch("");
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-bold rounded-lg border border-purple-300 text-[#5E17EB] hover:bg-purple-100 transition shrink-0"
+                        >
+                          Ganti Anggota
+                        </button>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  // Search Box & List Filter Anggota
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Ketik nama anggota, ID (VOCA-...), username, atau HP..."
+                        value={memberInvoiceSearch}
+                        onChange={(e) => setMemberInvoiceSearch(e.target.value)}
+                        className="w-full pl-8 pr-8 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:border-[#5E17EB]"
+                      />
+                      <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                      {memberInvoiceSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setMemberInvoiceSearch("")}
+                          className="absolute right-2.5 top-2.5 text-neutral-400 hover:text-black"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-44 overflow-y-auto space-y-1 border border-neutral-100 rounded-xl p-1 bg-neutral-50/60">
+                      {filteredMembersForInvoice.length === 0 ? (
+                        <div className="text-center py-4 text-neutral-400 text-xs">
+                          Tidak ditemukan anggota dengan kata kunci &quot;{memberInvoiceSearch}&quot;
+                        </div>
+                      ) : (
+                        filteredMembersForInvoice.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setSingleInvoiceForm({
+                                ...singleInvoiceForm,
+                                memberId: m.memberId,
+                                amount: String(m.monthlyFee),
+                              });
+                              setMemberInvoiceSearch("");
+                            }}
+                            className="w-full text-left p-2 rounded-lg bg-white hover:bg-purple-50 hover:border-purple-200 border border-neutral-100 transition flex items-center justify-between group"
+                          >
+                            <div>
+                              <p className="font-bold text-neutral-900 group-hover:text-[#5E17EB] transition">
+                                {m.fullName}
+                              </p>
+                              <p className="text-[10px] text-neutral-500 font-mono">
+                                {m.memberId} • {m.programType}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <span className="font-bold text-neutral-800 text-xs block">
+                                Rp {m.monthlyFee.toLocaleString("id-ID")}
+                              </span>
+                              <span className="text-[10px] text-[#5E17EB] font-bold group-hover:underline">
+                                Pilih &rarr;
+                              </span>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -3396,7 +3717,16 @@ export default function AdminDashboardPage() {
                     value={parseMonthPeriod(singleInvoiceForm.monthPeriod).month}
                     onChange={(e) => {
                       const { year } = parseMonthPeriod(singleInvoiceForm.monthPeriod);
-                      setSingleInvoiceForm({ ...singleInvoiceForm, monthPeriod: `${e.target.value} ${year}` });
+                      const newPeriod = `${e.target.value} ${year}`;
+                      const defaultIssue = getDefaultDateForPeriod(e.target.value, year);
+                      const days = parseInt(singleInvoiceForm.daysUntilDue, 10) || 7;
+                      const newDue = computeDueDateFromIssue(defaultIssue, days);
+                      setSingleInvoiceForm({
+                        ...singleInvoiceForm,
+                        monthPeriod: newPeriod,
+                        issueDate: defaultIssue,
+                        dueDate: newDue,
+                      });
                     }}
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
                   >
@@ -3408,7 +3738,16 @@ export default function AdminDashboardPage() {
                     value={parseMonthPeriod(singleInvoiceForm.monthPeriod).year}
                     onChange={(e) => {
                       const { month } = parseMonthPeriod(singleInvoiceForm.monthPeriod);
-                      setSingleInvoiceForm({ ...singleInvoiceForm, monthPeriod: `${month} ${e.target.value}` });
+                      const newPeriod = `${month} ${e.target.value}`;
+                      const defaultIssue = getDefaultDateForPeriod(month, e.target.value);
+                      const days = parseInt(singleInvoiceForm.daysUntilDue, 10) || 7;
+                      const newDue = computeDueDateFromIssue(defaultIssue, days);
+                      setSingleInvoiceForm({
+                        ...singleInvoiceForm,
+                        monthPeriod: newPeriod,
+                        issueDate: defaultIssue,
+                        dueDate: newDue,
+                      });
                     }}
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
                   >
@@ -3421,27 +3760,94 @@ export default function AdminDashboardPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-neutral-700 mb-1">Nominal (Rp) *</label>
+                  <label className="block font-bold text-neutral-700 mb-1">
+                    Tanggal Terbit Tagihan *
+                  </label>
                   <input
-                    type="number"
+                    type="date"
                     required
-                    value={singleInvoiceForm.amount}
-                    onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, amount: e.target.value })}
-                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                    value={singleInvoiceForm.issueDate}
+                    onChange={(e) => {
+                      const newIssue = e.target.value;
+                      const days = parseInt(singleInvoiceForm.daysUntilDue, 10) || 7;
+                      const newDue = computeDueDateFromIssue(newIssue, days);
+                      setSingleInvoiceForm({
+                        ...singleInvoiceForm,
+                        issueDate: newIssue,
+                        dueDate: newDue,
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-neutral-700 mb-1">Batas Bayar (Hari) *</label>
+                  <label className="block font-bold text-neutral-700 mb-1">
+                    Batas Bayar (Hari) *
+                  </label>
                   <input
                     type="number"
                     min="1"
-                    max="30"
+                    max="60"
                     required
                     value={singleInvoiceForm.daysUntilDue}
-                    onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, daysUntilDue: e.target.value })}
-                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
+                    onChange={(e) => {
+                      const days = parseInt(e.target.value, 10) || 1;
+                      const newDue = computeDueDateFromIssue(singleInvoiceForm.issueDate, days);
+                      setSingleInvoiceForm({
+                        ...singleInvoiceForm,
+                        daysUntilDue: e.target.value,
+                        dueDate: newDue,
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">
+                  Tanggal Jatuh Tempo (Batas Terakhir Pembayaran) *
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={singleInvoiceForm.dueDate}
+                  onChange={(e) => {
+                    const newDue = e.target.value;
+                    const diffDays = computeDaysBetween(singleInvoiceForm.issueDate, newDue);
+                    setSingleInvoiceForm({
+                      ...singleInvoiceForm,
+                      dueDate: newDue,
+                      daysUntilDue: String(diffDays),
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold text-[#5E17EB]"
+                />
+              </div>
+
+              {/* Dynamic Preview Banner */}
+              <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200/60 flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-neutral-700">
+                  <Calendar className="w-3.5 h-3.5 text-[#5E17EB]" />
+                  <span>Terbit: <strong>{formatDisplayDate(singleInvoiceForm.issueDate)}</strong></span>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                <div className="flex items-center gap-1.5 text-neutral-700">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Jatuh Tempo: <strong className="text-purple-700">{formatDisplayDate(singleInvoiceForm.dueDate)}</strong></span>
+                  <span className="text-[10px] text-neutral-500">({singleInvoiceForm.daysUntilDue} hari)</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Nominal (Rp) *</label>
+                <input
+                  type="number"
+                  required
+                  value={singleInvoiceForm.amount}
+                  onChange={(e) => setSingleInvoiceForm({ ...singleInvoiceForm, amount: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-bold"
+                />
               </div>
 
               <div>

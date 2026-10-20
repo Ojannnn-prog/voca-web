@@ -33,3 +33,7 @@ pnpm-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# User Uploads
+/public/uploads/*
+!/public/uploads/.gitkeep

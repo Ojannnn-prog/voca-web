@@ -66,15 +66,25 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { action, monthPeriod, dueDate, memberId, amount, notes } = body;
+    const { action, monthPeriod, issueDate, dueDate, daysUntilDue, memberId, amount, notes } = body;
 
     const allInvoices = await db.select().from(memberInvoices);
     let sequenceCounter = getSafeNextInvoiceSequence(allInvoices);
 
-    // Default due date: 7 hari setelah hari ini jika tidak ditentukan
-    const targetDueDate = dueDate
-      ? new Date(dueDate)
-      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    // Tanggal Terbit Tagihan (Issue Date)
+    const targetIssueDate = issueDate ? new Date(issueDate) : new Date();
+
+    // Batas Bayar / Jatuh Tempo:
+    // Jika dueDate dikirimkan, gunakan tanggal tersebut.
+    // Jika tidak, hitung dari targetIssueDate + (days - 1) hari (misal tgl 1 + 6 hari = tgl 7)
+    let targetDueDate: Date;
+    if (dueDate) {
+      targetDueDate = new Date(dueDate);
+    } else {
+      const days = parseInt(daysUntilDue, 10) || 7;
+      const offsetDays = days > 1 ? days - 1 : 0;
+      targetDueDate = new Date(targetIssueDate.getTime() + offsetDays * 24 * 60 * 60 * 1000);
+    }
 
     if (action === "bulk") {
       // MODE 1: Tagihan Massal ke Seluruh Anggota Aktif
@@ -115,7 +125,7 @@ export async function POST(request: Request) {
               memberName: m.fullName,
               monthPeriod: monthPeriod || "Oktober 2026",
               amount: m.monthlyFee,
-              issueDate: new Date(),
+              issueDate: targetIssueDate,
               dueDate: targetDueDate,
               status: "unpaid",
               notes: notes || `Tagihan iuran reguler bulanan ${monthPeriod || "Oktober 2026"}`,
@@ -190,7 +200,7 @@ export async function POST(request: Request) {
           memberName: member.fullName,
           monthPeriod: targetPeriod,
           amount: parseInt(amount, 10),
-          issueDate: new Date(),
+          issueDate: targetIssueDate,
           dueDate: targetDueDate,
           status: "unpaid",
           notes: notes || `Tagihan khusus anggota ${member.fullName}`,
@@ -294,6 +304,7 @@ export async function PATCH(request: Request) {
     if (amount !== undefined) updateFields.amount = parseInt(amount, 10);
     if (monthPeriod !== undefined) updateFields.monthPeriod = monthPeriod;
     if (dueDate !== undefined) updateFields.dueDate = new Date(dueDate);
+    if (body.issueDate !== undefined) updateFields.issueDate = new Date(body.issueDate);
     if (notes !== undefined) updateFields.notes = notes;
 
     const [updatedInvoice] = await db
