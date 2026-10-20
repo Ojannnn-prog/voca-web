@@ -358,28 +358,6 @@ function MemberPortalContent() {
               Cari
             </button>
           </form>
-
-          {/* Quick Demo Switcher */}
-          <div className="flex items-center gap-1.5 flex-wrap text-xs">
-            <span className="text-neutral-400 text-[11px] font-semibold">Demo ID:</span>
-            {["VOCA-2026-001", "VOCA-2026-002", "VOCA-2026-003", "VOCA-2026-004"].map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setSearchInput(id);
-                  loadProfile(id);
-                }}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition ${
-                  currentMember?.memberId === id
-                    ? "bg-[#5E17EB] text-white shadow-sm"
-                    : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                }`}
-              >
-                {id}
-              </button>
-            ))}
-          </div>
         </div>
 
         {errorMessage && (

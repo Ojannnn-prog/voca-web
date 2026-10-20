@@ -150,11 +150,13 @@ export async function POST(request: Request) {
     const invSeq = getSafeNextInvoiceSequence(allInvoices);
     const invoiceNumber = generateInvoiceCode(invSeq, now);
 
+    const currentMonthPeriod = `${now.toLocaleDateString("id-ID", { month: "long" })} ${currentYear}`;
+
     await db.insert(memberInvoices).values({
       invoiceNumber,
       memberId,
       memberName: lead.fullName,
-      monthPeriod: `Oktober ${currentYear}`,
+      monthPeriod: currentMonthPeriod,
       amount: finalMonthlyFee,
       issueDate: now,
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
