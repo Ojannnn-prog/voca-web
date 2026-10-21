@@ -173,7 +173,7 @@ export function RegistrationModal({
   };
 
   const handleOpenWhatsAppConsultation = () => {
-    const adminPhone = process.env.NEXT_PUBLIC_WHATSAPP_ADMIN_NUMBER || "6281234567890";
+    const adminPhone = process.env.NEXT_PUBLIC_WHATSAPP_ADMIN_NUMBER || "6287887964978";
     const cleanPhone = adminPhone.replace(/[^0-9]/g, "");
     const msg = `Halo Admin & Head Coach VOCA, saya ingin berkonsultasi gratis seputar program olahraga:
 - Nama: ${fullName || "Calon Peserta"}
@@ -282,7 +282,7 @@ Mohon arahannya untuk rekomendasi kelas & jadwal yang sesuai. Terima kasih!`;
                 </button>
                 <a
                   href={`https://wa.me/${
-                    process.env.NEXT_PUBLIC_WHATSAPP_ADMIN_NUMBER || "6281234567890"
+                    process.env.NEXT_PUBLIC_WHATSAPP_ADMIN_NUMBER || "6287887964978"
                   }?text=Halo%20Admin%20VOCA,%20saya%20sudah%20mengirim%20pendaftaran%20${encodeURIComponent(
                     activeTab
                   )}%20atas%20nama%20${encodeURIComponent(fullName)}.`}

@@ -127,30 +127,17 @@ export async function POST(request: Request) {
       })
       .returning();
 
-    // 4. Catat otomatis ke buku kas keuangan
+    // 4. Terbitkan tagihan perdana di tabel member_invoices dengan status 'unpaid' (BELUM BAYAR)
+    // Sesuai ketentuan: Pendaftaran baru TIDAK langsung menambah saldo kas klub.
+    // Uang kas baru bertambah otomatis setelah bukti pembayaran diverifikasi Admin menjadi 'paid'.
     const now = new Date();
-    const allTrx = await db.select().from(financeTransactions);
-    const trxSeq = getSafeNextTransactionSequence(allTrx);
-    const nextCode = generateTransactionCode(trxSeq, now);
-
-    await db.insert(financeTransactions).values({
-      transactionCode: nextCode,
-      type: "income",
-      category: "Iuran Bulanan Member",
-      amount: finalMonthlyFee,
-      memberId: memberId,
-      paymentMethod: "Transfer Bank",
-      description: `Iuran pendaftaran perdana anggota baru ${lead.fullName} (${memberId})`,
-      transactionDate: now,
-      createdByUser: "adminvoca",
-    });
-
-    // 5. Terbitkan tagihan perdana di tabel member_invoices dengan status 'paid'
     const allInvoices = await db.select().from(memberInvoices);
     const invSeq = getSafeNextInvoiceSequence(allInvoices);
     const invoiceNumber = generateInvoiceCode(invSeq, now);
 
     const currentMonthPeriod = `${now.toLocaleDateString("id-ID", { month: "long" })} ${currentYear}`;
+    // Batas jatuh tempo pembayaran: 7 hari sejak tanggal pendaftaran
+    const dueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     await db.insert(memberInvoices).values({
       invoiceNumber,
@@ -159,16 +146,16 @@ export async function POST(request: Request) {
       monthPeriod: currentMonthPeriod,
       amount: finalMonthlyFee,
       issueDate: now,
-      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      status: "paid",
-      paymentDate: now,
+      dueDate,
+      status: "unpaid",
+      paymentDate: null,
       paymentMethod: "Transfer Bank",
-      notes: "Iuran perdana registrasi anggota baru",
-      verifiedByUser: "adminvoca",
-      transactionCode: nextCode,
+      notes: `Tagihan perdana registrasi anggota baru (Jatuh tempo 7 hari: ${dueDate.toLocaleDateString("id-ID")})`,
+      verifiedByUser: null,
+      transactionCode: null,
     });
 
-    // 6. Update status di trial_leads menjadi 'converted'
+    // 5. Update status di trial_leads menjadi 'converted'
     await db
       .update(trialLeads)
       .set({ status: "converted" })
@@ -182,7 +169,7 @@ export async function POST(request: Request) {
         password,
         memberId,
       },
-      message: `Pendaftar ${lead.fullName} resmi menjadi anggota! Akun: ${username} (Password: ${password}), ID: ${memberId}, dan dana Rp ${finalMonthlyFee.toLocaleString("id-ID")} otomatis MASUK ke saldo kas!`,
+      message: `Pendaftar ${lead.fullName} resmi menjadi anggota! Akun: ${username} (Password: ${password}), ID: ${memberId}. Tagihan perdana Rp ${finalMonthlyFee.toLocaleString("id-ID")} berhasil diterbitkan dengan status BELUM BAYAR (Jatuh tempo 7 hari). Saldo kas belum bertambah sampai tagihan lunas diverifikasi.`,
     });
   } catch (error: any) {
     console.error("Gagal mengonversi lead ke member:", error);

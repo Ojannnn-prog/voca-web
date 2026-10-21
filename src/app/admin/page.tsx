@@ -4261,7 +4261,7 @@ export default function AdminDashboardPage() {
                   <input
                     type="tel"
                     required
-                    placeholder="08123456789"
+                    placeholder="087887964978"
                     value={newLeadForm.phoneNumber}
                     onChange={(e) => setNewLeadForm({ ...newLeadForm, phoneNumber: e.target.value })}
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-mono"
@@ -4437,7 +4437,7 @@ export default function AdminDashboardPage() {
                     required
                     value={newMemberForm.phoneNumber}
                     onChange={(e) => setNewMemberForm({ ...newMemberForm, phoneNumber: e.target.value })}
-                    placeholder="08123456789"
+                    placeholder="087887964978"
                     className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl"
                   />
                 </div>

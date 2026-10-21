@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { members, memberInvoices, financeTransactions } from "@/db/schema";
-import { generateMemberCredentials, getSafeNextMemberSequence } from "@/lib/account-generator";
+import { members, memberInvoices, financeTransactions, trialLeads } from "@/db/schema";
+import {
+  generateMemberCredentials,
+  getSafeNextMemberSequence,
+  generateInvoiceCode,
+  getSafeNextInvoiceSequence,
+} from "@/lib/account-generator";
 import { desc, eq, or } from "drizzle-orm";
 
 import { verifyAdminSessionToken } from "@/lib/auth-session";
@@ -119,10 +124,33 @@ export async function POST(request: Request) {
       })
       .returning();
 
+    // Terbitkan tagihan perdana dengan status 'unpaid' (Jatuh tempo 7 hari)
+    // Sesuai prinsip keuangan VOCA: Pendaftaran tidak langsung menambah saldo kas sebelum lunas
+    const now = new Date();
+    const allInvoices = await db.select().from(memberInvoices);
+    const invSeq = getSafeNextInvoiceSequence(allInvoices);
+    const invoiceNumber = generateInvoiceCode(invSeq, now);
+    const currentMonthPeriod = `${now.toLocaleDateString("id-ID", { month: "long" })} ${currentYear}`;
+    const dueDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    await db.insert(memberInvoices).values({
+      invoiceNumber,
+      memberId,
+      memberName: fullName.trim(),
+      monthPeriod: currentMonthPeriod,
+      amount: monthlyFee ? parseInt(monthlyFee, 10) : 347000,
+      issueDate: now,
+      dueDate,
+      status: "unpaid",
+      paymentDate: null,
+      paymentMethod: "Transfer Bank",
+      notes: `Tagihan iuran perdana registrasi anggota baru (Jatuh tempo 7 hari: ${dueDate.toLocaleDateString("id-ID")})`,
+    });
+
     return NextResponse.json({
       success: true,
       member: newMember,
-      message: `Anggota ${fullName} berhasil didaftarkan dengan ID ${memberId} dan akun ${username}.`,
+      message: `Anggota ${fullName} berhasil didaftarkan dengan ID ${memberId} dan akun ${username}. Tagihan perdana status BELUM BAYAR telah diterbitkan.`,
     });
   } catch (error: any) {
     console.error("Gagal menambahkan anggota:", error);
@@ -235,10 +263,26 @@ export async function DELETE(request: Request) {
       .where(eq(members.id, parseInt(id, 10)));
 
     if (member) {
+      // Sinkronisasi status pendaftar di trial_leads: Kembalikan status ke 'pending' jika ada
+      await db
+        .update(trialLeads)
+        .set({ status: "pending" })
+        .where(
+          or(
+            eq(trialLeads.phoneNumber, member.phoneNumber),
+            eq(trialLeads.fullName, member.fullName)
+          )
+        );
+
       // Hapus tagihan terkait anggota agar database bersih
       await db
         .delete(memberInvoices)
         .where(eq(memberInvoices.memberId, member.memberId));
+
+      // Hapus mutasi transaksi kas terkait anggota
+      await db
+        .delete(financeTransactions)
+        .where(eq(financeTransactions.memberId, member.memberId));
 
       // Hapus anggota
       await db.delete(members).where(eq(members.id, parseInt(id, 10)));

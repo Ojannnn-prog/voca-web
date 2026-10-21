@@ -94,10 +94,15 @@ export function Footer({ onOpenRegister }: FooterProps) {
               Informasi & Konsultasi
             </h4>
             <div className="space-y-2.5 text-xs text-neutral-400">
-              <p className="flex items-center gap-2">
+              <a
+                href="https://wa.me/6287887964978?text=Halo%20Admin%20VOCA,%20saya%20ingin%20bertanya%20seputar%20program%20latihan%20dan%20jadwal."
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 hover:text-[#25D366] transition"
+              >
                 <Phone className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
-                <span>+62 812-3456-7890 (WhatsApp Admin)</span>
-              </p>
+                <span>+62 878-8796-4978 (WhatsApp Admin)</span>
+              </a>
               <p className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-neutral-300 shrink-0" />
                 <span>info@voca-athletics.com</span>

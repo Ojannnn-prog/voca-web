@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/db";
-import { trialLeads } from "@/db/schema";
+import { trialLeads, members } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 
 import { verifyAdminSessionToken } from "@/lib/auth-session";
@@ -24,6 +24,29 @@ export async function GET() {
       .select()
       .from(trialLeads)
       .orderBy(desc(trialLeads.createdAt));
+
+    // Sinkronisasi otomatis: jika lead berstatus 'converted' tetapi anggotanya sudah dihapus/kosong di tabel members,
+    // kembalikan status lead ke 'pending' agar data pendaftar dan anggota selalu sinkron dan konsisten.
+    const allMembers = await db
+      .select({ phoneNumber: members.phoneNumber, fullName: members.fullName })
+      .from(members);
+    const memberPhones = new Set(allMembers.map((m) => (m.phoneNumber || "").trim()));
+    const memberNames = new Set(allMembers.map((m) => (m.fullName || "").trim().toLowerCase()));
+
+    for (const lead of leads) {
+      if (lead.status === "converted") {
+        const hasMember =
+          memberPhones.has((lead.phoneNumber || "").trim()) ||
+          memberNames.has((lead.fullName || "").trim().toLowerCase());
+        if (!hasMember) {
+          lead.status = "pending";
+          await db
+            .update(trialLeads)
+            .set({ status: "pending" })
+            .where(eq(trialLeads.id, lead.id));
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, leads });
   } catch (error: any) {

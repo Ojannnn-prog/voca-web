@@ -9,7 +9,7 @@ interface FloatingWhatsAppProps {
 }
 
 export function FloatingWhatsApp({
-  phoneNumber = process.env.NEXT_PUBLIC_WHATSAPP_ADMIN_NUMBER || "6281234567890",
+  phoneNumber = process.env.NEXT_PUBLIC_WHATSAPP_ADMIN_NUMBER || "6287887964978",
   defaultMessage = process.env.NEXT_PUBLIC_WHATSAPP_DEFAULT_MESSAGE ||
     "Halo Admin VOCA, saya ingin bertanya seputar program latihan dan jadwal trial class di VOCA (Vortex Community of Athletics).",
 }: FloatingWhatsAppProps) {

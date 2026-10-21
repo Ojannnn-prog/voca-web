@@ -62,7 +62,7 @@ const KOP_SURAT_HTML = `
           Akademi Pembinaan Renang, Stimulasi Motorik & Kebugaran Jasmani
         </p>
         <p style="margin: 2px 0 0 0; font-size: 10px; color: #777;">
-          Sekretariat Pusat VOCA Club • WhatsApp Admin: 0812-3456-7890 • Didirikan: 10.10.26
+          Sekretariat Pusat VOCA Club • WhatsApp Admin: 0878-8796-4978 • Didirikan: 10.10.26
         </p>
       </div>
     </div>
