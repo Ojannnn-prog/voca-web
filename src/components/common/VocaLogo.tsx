@@ -71,7 +71,6 @@ export function VocaLogo({
   return (
     <div className={cn("inline-flex items-center gap-2.5 select-none", className)}>
       {/* OFFICIAL LOGO VOCA.SVG ICON */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/LOGO%20VOCA.svg"
         alt="VOCA Official Logo"

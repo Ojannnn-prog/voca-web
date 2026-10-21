@@ -3683,7 +3683,6 @@ export default function AdminDashboardPage() {
             {/* Gambar Bukti Transfer Nyata */}
             <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-neutral-900 border border-neutral-200 mb-4 flex items-center justify-center">
               {selectedProofInvoice.paymentProofUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={selectedProofInvoice.paymentProofUrl}
                   alt={`Bukti Transfer ${selectedProofInvoice.invoiceNumber}`}

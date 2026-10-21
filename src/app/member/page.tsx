@@ -407,29 +407,6 @@ function MemberPortalContent() {
 
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 space-y-6 sm:space-y-8">
-        {/* Member Selector / Search Bar */}
-        <div className="bg-white p-4 sm:p-5 rounded-[22px] border border-neutral-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-          <form onSubmit={handleSearch} className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-72">
-              <Search className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Masukkan ID Anggota / No. HP..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-xs bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5E17EB]/30 focus:border-[#5E17EB]"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="px-4 py-2 bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold rounded-xl transition shadow-sm shrink-0"
-            >
-              Cari
-            </button>
-          </form>
-        </div>
-
         {errorMessage && (
           <div className="p-4 bg-red-50 text-red-600 rounded-2xl border border-red-200 text-xs">
             {errorMessage}
@@ -1145,7 +1122,6 @@ function MemberPortalContent() {
                     {uploadFilePreview ? (
                       <div className="space-y-2">
                         <div className="relative w-full h-40 rounded-xl overflow-hidden bg-neutral-100 mx-auto">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={uploadFilePreview}
                             alt="Bukti Bayar Preview"
@@ -1222,7 +1198,6 @@ function MemberPortalContent() {
 
             <div className="rounded-2xl overflow-hidden bg-neutral-900 flex items-center justify-center max-h-[60vh] p-2">
               {previewProofInvoice.paymentProofUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={previewProofInvoice.paymentProofUrl}
                   alt="Struk Pembayaran"
