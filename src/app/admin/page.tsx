@@ -49,12 +49,20 @@ import {
   UserCog,
   Camera,
   Upload,
+  KeyRound,
+  QrCode,
+  Scan,
 } from "lucide-react";
 import {
   exportFinancialReportPdf,
   exportMembersReportPdf,
   exportStaffReportPdf,
+  AttendanceReportItem,
 } from "@/lib/pdf-report-generator";
+import { AttendanceManagement } from "@/components/admin/AttendanceManagement";
+import { ClassManagement } from "@/components/admin/ClassManagement";
+import { ResetCredentialsModal } from "@/components/admin/ResetCredentialsModal";
+import { AdminProfileModal } from "@/components/admin/AdminProfileModal";
 
 // Konstanta Periode Bulan dan Tahun untuk Dropdown Otomatis
 const MONTH_NAMES = [
@@ -249,10 +257,12 @@ interface FinanceTransaction {
 interface SystemUser {
   id: number;
   username: string;
+  password?: string | null;
   fullName: string;
   role: string;
   email: string | null;
   phoneNumber: string | null;
+  coachCode?: string | null;
   specialty: string | null;
   status: string;
   createdAt: string;
@@ -276,8 +286,14 @@ interface ConfirmModalProps {
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [currentUser, setCurrentUser] = useState<{
+    username: string;
+    fullName: string;
+    role: "admin" | "staff" | "coach";
+    coachCode?: string | null;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "applicants" | "members" | "invoices" | "finance" | "users"
+    "dashboard" | "applicants" | "members" | "invoices" | "finance" | "attendance" | "classes" | "users"
   >("dashboard");
 
   // State Data
@@ -292,6 +308,15 @@ export default function AdminDashboardPage() {
     transactionCount: 0,
   });
   const [systemUsersList, setSystemUsersList] = useState<SystemUser[]>([]);
+
+  // Modul Presensi & Atur Kelas States
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceReportItem[]>([]);
+  const [attendanceStats, setAttendanceStats] = useState<any>(null);
+  const [trainingClassesList, setTrainingClassesList] = useState<any[]>([]);
+
+  // Modals Reset Kredensial & Profil Admin
+  const [isResetCredentialsOpen, setIsResetCredentialsOpen] = useState(false);
+  const [isAdminProfileOpen, setIsAdminProfileOpen] = useState(false);
 
   // Loading States
   const [isLoading, setIsLoading] = useState(false);
@@ -464,6 +489,24 @@ export default function AdminDashboardPage() {
       const resUsers = await fetch("/api/admin/users");
       const dataUsers = await resUsers.json();
       if (dataUsers.success) setSystemUsersList(dataUsers.users || []);
+
+      // 6. Fetch attendance records & stats
+      try {
+        const resAtt = await fetch("/api/admin/attendance");
+        const dataAtt = await resAtt.json();
+        if (dataAtt.success) setAttendanceRecords(dataAtt.records || []);
+
+        const resStats = await fetch("/api/admin/attendance/stats");
+        const dataStats = await resStats.json();
+        if (dataStats.success) setAttendanceStats(dataStats.stats || null);
+      } catch {}
+
+      // 7. Fetch training classes
+      try {
+        const resClasses = await fetch("/api/admin/classes");
+        const dataClasses = await resClasses.json();
+        if (dataClasses.success) setTrainingClassesList(dataClasses.classes || []);
+      } catch {}
     } catch (err) {
       console.error("Gagal sinkronisasi data admin:", err);
       showToast("error", "Koneksi Terganggu", "Gagal menyinkronkan data terbaru dengan server.");
@@ -472,14 +515,27 @@ export default function AdminDashboardPage() {
     }
   }, [showToast]);
 
-  // Auth check
+  // Auth check & RBAC init
   useEffect(() => {
     async function checkAuth() {
       try {
         const res = await fetch("/api/auth/me");
         const data = await res.json();
-        if (data.isAdmin) {
+        if (data.isAdmin || data.isStaff || data.isCoach) {
           setIsAuthenticated(true);
+          const userObj = data.user || {
+            username: data.isAdmin ? "adminvoca" : "stafvoca",
+            fullName: data.isAdmin
+              ? "Administrator Utama"
+              : data.isStaff
+              ? "Staf Sekretariat"
+              : "Pelatih VOCA",
+            role: data.isAdmin ? "admin" : data.isStaff ? "staff" : "coach",
+          };
+          setCurrentUser(userObj);
+          if (data.isCoach) {
+            setActiveTab("attendance");
+          }
           fetchAllData();
         } else {
           router.push("/login?role=admin&redirect=/admin");
@@ -492,7 +548,18 @@ export default function AdminDashboardPage() {
   }, [router, fetchAllData]);
 
   // Tab switcher with notification
-  const handleTabSwitch = (tabId: "dashboard" | "applicants" | "members" | "invoices" | "finance" | "users", label: string) => {
+  const handleTabSwitch = (
+    tabId:
+      | "dashboard"
+      | "applicants"
+      | "members"
+      | "invoices"
+      | "finance"
+      | "attendance"
+      | "classes"
+      | "users",
+    label: string
+  ) => {
     setActiveTab(tabId);
     showToast("info", "Navigasi Menu", `Beralih ke tab: ${label}`);
   };
@@ -1387,46 +1454,55 @@ export default function AdminDashboardPage() {
             <p className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2 px-3">
               Admin CMS Management
             </p>
-            {[
-              { id: "dashboard", label: "Dashboard Utama", icon: Layers, badge: null },
-              { id: "applicants", label: "Pendaftar Baru", icon: FileCheck, badge: pendingLeadsCount },
-              { id: "members", label: "Database Anggota", icon: Users, badge: activeMembersCount },
-              { id: "invoices", label: "Tagihan & Bukti Bayar", icon: Receipt, badge: pendingInvoicesCount },
-              { id: "finance", label: "Kas & Keuangan Klub", icon: DollarSign, badge: null },
-              { id: "users", label: "Kelola User & Staf", icon: UserCheck, badge: null },
-            ].map((nav) => {
-              const Icon = nav.icon;
-              const isActive = activeTab === nav.id;
-              return (
-                <button
-                  key={nav.id}
-                  onClick={() => handleTabSwitch(nav.id as any, nav.label)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition text-left ${
-                    isActive
-                      ? "bg-[#5E17EB] text-white shadow-md shadow-purple-500/15"
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{nav.label}</span>
-                  </div>
-                  {nav.badge !== null && nav.badge > 0 && (
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+            {(() => {
+              const role = currentUser?.role || "admin";
+              const allNavs = [
+                { id: "dashboard", label: "Dashboard Utama", icon: Layers, badge: null, roles: ["admin", "staff"] },
+                { id: "applicants", label: "Pendaftar Baru", icon: FileCheck, badge: pendingLeadsCount, roles: ["admin", "staff"] },
+                { id: "members", label: "Database Anggota", icon: Users, badge: activeMembersCount, roles: ["admin", "staff", "coach"] },
+                { id: "invoices", label: "Tagihan & Bukti Bayar", icon: Receipt, badge: pendingInvoicesCount, roles: ["admin", "staff"] },
+                { id: "finance", label: "Kas & Keuangan Klub", icon: DollarSign, badge: null, roles: ["admin", "staff", "coach"] },
+                { id: "attendance", label: "Presensi & Kehadiran", icon: QrCode, badge: null, roles: ["admin", "staff", "coach"] },
+                { id: "classes", label: "Atur Kelas Latihan", icon: Calendar, badge: null, roles: ["admin", "staff", "coach"] },
+                { id: "users", label: "Kelola User & Staf", icon: UserCheck, badge: null, roles: ["admin"] },
+              ];
+
+              return allNavs
+                .filter((nav) => nav.roles.includes(role))
+                .map((nav) => {
+                  const Icon = nav.icon;
+                  const isActive = activeTab === nav.id;
+                  return (
+                    <button
+                      key={nav.id}
+                      onClick={() => handleTabSwitch(nav.id as any, nav.label)}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition text-left ${
                         isActive
-                          ? "bg-white text-[#5E17EB]"
-                          : nav.id === "invoices"
-                          ? "bg-amber-100 text-amber-800 animate-pulse"
-                          : "bg-neutral-200 text-neutral-700"
+                          ? "bg-[#5E17EB] text-white shadow-md shadow-purple-500/15"
+                          : "text-neutral-600 hover:bg-neutral-100"
                       }`}
                     >
-                      {nav.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                      <div className="flex items-center gap-2.5">
+                        <Icon className="w-4 h-4 shrink-0" />
+                        <span>{nav.label}</span>
+                      </div>
+                      {nav.badge !== null && nav.badge > 0 && (
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            isActive
+                              ? "bg-white text-[#5E17EB]"
+                              : nav.id === "invoices"
+                              ? "bg-amber-100 text-amber-800 animate-pulse"
+                              : "bg-neutral-200 text-neutral-700"
+                          }`}
+                        >
+                          {nav.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                });
+            })()}
           </div>
         </div>
 
@@ -1466,6 +1542,8 @@ export default function AdminDashboardPage() {
               {activeTab === "members" && "Database Anggota Resmi & Akun Member"}
               {activeTab === "invoices" && "Manajemen Tagihan & Verifikasi Bukti Transfer"}
               {activeTab === "finance" && "Buku Kas & Transaksi Keuangan Klub"}
+              {activeTab === "attendance" && "Presensi Kehadiran & Scanner QR Code"}
+              {activeTab === "classes" && "Atur Kelas Latihan & Roster Siswa"}
               {activeTab === "users" && "Kelola User, Pengurus, & Pelatih"}
             </h1>
             <p className="text-xs sm:text-sm text-neutral-500 mt-1">
@@ -1474,6 +1552,37 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
+            {/* User Role Badge */}
+            <span className="px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-50 text-[#5E17EB] border border-purple-200 shadow-xs">
+              {currentUser?.role === "admin"
+                ? "Superadmin"
+                : currentUser?.role === "staff"
+                ? "Staf Sekretariat"
+                : "Pelatih VOCA"}
+            </span>
+
+            {/* Profil Saya Button */}
+            <button
+              onClick={() => setIsAdminProfileOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full border border-neutral-200 bg-white text-xs font-bold text-neutral-700 hover:bg-neutral-50 shadow-sm transition"
+              title="Edit Profil & Ubah Password"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-[#5E17EB]" />
+              <span className="hidden sm:inline">Profil & Password</span>
+            </button>
+
+            {/* Reset Kredensial Multi-Role (Admin Only) */}
+            {currentUser?.role === "admin" && (
+              <button
+                onClick={() => setIsResetCredentialsOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold hover:bg-amber-100 shadow-sm transition"
+                title="Reset Kredensial Seluruh Level Pengguna"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                <span className="hidden md:inline">Reset Akun</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 fetchAllData();
@@ -1508,13 +1617,15 @@ export default function AdminDashboardPage() {
                   <Printer className="w-3.5 h-3.5 text-[#5E17EB]" />
                   <span>Export PDF Anggota</span>
                 </button>
-                <button
-                  onClick={() => setIsAddMemberOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md shadow-purple-500/20 transition active:scale-95"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Tambah Anggota Baru</span>
-                </button>
+                {currentUser?.role !== "coach" && (
+                  <button
+                    onClick={() => setIsAddMemberOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#5E17EB] hover:bg-[#4d10c7] text-white text-xs font-bold shadow-md shadow-purple-500/20 transition active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Anggota Baru</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -1549,26 +1660,30 @@ export default function AdminDashboardPage() {
                   <Printer className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Export PDF Laporan Kas</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setFinanceModalType("income");
-                    setIsAddFinanceOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition active:scale-95"
-                >
-                  <ArrowDownLeft className="w-3.5 h-3.5" />
-                  <span>Catat Pemasukan</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setFinanceModalType("expense");
-                    setIsAddFinanceOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition active:scale-95"
-                >
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                  <span>Catat Pengeluaran</span>
-                </button>
+                {currentUser?.role !== "coach" && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setFinanceModalType("income");
+                        setIsAddFinanceOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition active:scale-95"
+                    >
+                      <ArrowDownLeft className="w-3.5 h-3.5" />
+                      <span>Catat Pemasukan</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setFinanceModalType("expense");
+                        setIsAddFinanceOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition active:scale-95"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                      <span>Catat Pengeluaran</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -2203,6 +2318,18 @@ export default function AdminDashboardPage() {
         {/* ================= TAB 3: DATABASE ANGGOTA & AKUN MEMBER ================= */}
         {activeTab === "members" && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Coach Read-Only Mode Banner */}
+            {currentUser?.role === "coach" && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700 font-bold uppercase tracking-wider text-[10px]">READ ONLY</span>
+                  <span>
+                    <strong>Mode Akses Pelatih:</strong> Anda memiliki hak akses untuk memantau, mencari, dan melihat KTA Digital anggota. Pengelolaan akun, penambahan, perpanjangan masa aktif, dan mutasi data anggota dikelola oleh Staf & Admin.
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Search Bar & Stats Header */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-[22px] border border-neutral-200/80 shadow-sm">
               <div className="relative w-full sm:w-80">
@@ -2234,7 +2361,9 @@ export default function AdminDashboardPage() {
                       <th className="py-3.5 px-4">Iuran / Bulan</th>
                       <th className="py-3.5 px-4">Masa Berlaku</th>
                       <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
+                      <th className="py-3.5 px-4 text-center">
+                        {currentUser?.role === "coach" ? "Aksi (KTA)" : "Aksi Manajemen (CRUD)"}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 font-medium">
@@ -2246,9 +2375,15 @@ export default function AdminDashboardPage() {
                             <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] font-semibold">
                               User: {member.username || `membervoca2026${member.id}`}
                             </span>
-                            <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] text-neutral-500">
-                              Pass: {member.password || `vocamember2026`}
-                            </span>
+                            {currentUser?.role === "coach" ? (
+                              <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] text-neutral-400">
+                                Pass: ••••••••
+                              </span>
+                            ) : (
+                              <span className="bg-neutral-100 px-1.5 py-0.5 rounded text-[10px] text-neutral-500">
+                                Pass: {member.password || `vocamember2026`}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="py-3.5 px-4">
@@ -2294,45 +2429,49 @@ export default function AdminDashboardPage() {
                               <span>KTA</span>
                             </button>
 
-                            {/* Tombol Edit Anggota */}
-                            <button
-                              onClick={() => setEditingMember(member)}
-                              className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
-                              title="Edit Data Anggota"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                            {currentUser?.role !== "coach" && (
+                              <>
+                                {/* Tombol Edit Anggota */}
+                                <button
+                                  onClick={() => setEditingMember(member)}
+                                  className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                                  title="Edit Data Anggota"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
 
-                            {/* Tombol WhatsApp Kirim Kredensial */}
-                            <a
-                              href={`https://wa.me/${member.phoneNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                                `Halo Bapak/Ibu ${member.fullName},\n\nBerikut akun resmi Portal Anggota VOCA:\nUsername: ${member.username || `membervoca2026${member.id}`}\nPassword: ${member.password || "vocamember2026"}\nID Member: ${member.memberId}\n\nSilakan login di https://voca-athletics.com/login.\n\nSalam,\nAdmin VOCA Athletics`
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                              title="Kirim Kredensial Akun via WhatsApp"
-                            >
-                              <Send className="w-3.5 h-3.5" />
-                            </a>
+                                {/* Tombol WhatsApp Kirim Kredensial */}
+                                <a
+                                  href={`https://wa.me/${member.phoneNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                                    `Halo Bapak/Ibu ${member.fullName},\n\nBerikut akun resmi Portal Anggota VOCA:\nUsername: ${member.username || `membervoca2026${member.id}`}\nPassword: ${member.password || "vocamember2026"}\nID Member: ${member.memberId}\n\nSilakan login di https://voca-athletics.com/login.\n\nSalam,\nAdmin VOCA Athletics`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                                  title="Kirim Kredensial Akun via WhatsApp"
+                                >
+                                  <Send className="w-3.5 h-3.5" />
+                                </a>
 
-                            {/* Tombol Perpanjang 1 Bulan */}
-                            <button
-                              onClick={() => handleExtendMember(member.id, 1, member.fullName)}
-                              className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold transition"
-                              title="Perpanjang 1 Bulan"
-                            >
-                              +1 Bln
-                            </button>
+                                {/* Tombol Perpanjang 1 Bulan */}
+                                <button
+                                  onClick={() => handleExtendMember(member.id, 1, member.fullName)}
+                                  className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[11px] font-bold transition"
+                                  title="Perpanjang 1 Bulan"
+                                >
+                                  +1 Bln
+                                </button>
 
-                            {/* Tombol Hapus Anggota */}
-                            <button
-                              onClick={() => handleDeleteMember(member.id, member.fullName)}
-                              className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 transition"
-                              title="Hapus Anggota"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                                {/* Tombol Hapus Anggota */}
+                                <button
+                                  onClick={() => handleDeleteMember(member.id, member.fullName)}
+                                  className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 transition"
+                                  title="Hapus Anggota"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -2576,6 +2715,17 @@ export default function AdminDashboardPage() {
         {/* ================= TAB 5: KAS & KEUANGAN KLUB ================= */}
         {activeTab === "finance" && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Coach Read-Only Mode Banner */}
+            {currentUser?.role === "coach" && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-900 px-4 py-3 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700 font-bold uppercase tracking-wider text-[10px]">READ ONLY</span>
+                  <span>
+                    <strong>Mode Akses Pelatih:</strong> Anda memiliki hak akses untuk memantau buku kas dan laporan keuangan klub secara transparan. Pencatatan transaksi dan penyesuaian arus kas dikelola oleh Bendahara / Staf & Admin.
+                  </span>
+                </div>
+              </div>
+            )}
             {/* Financial Overview Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-[24px] border border-neutral-200/80 shadow-sm">
@@ -2789,7 +2939,9 @@ export default function AdminDashboardPage() {
                       <th className="py-3.5 px-3">Metode Bayar</th>
                       <th className="py-3.5 px-3 text-right">Nominal Mutasi</th>
                       <th className="py-3.5 px-3 text-right">Saldo Berjalan</th>
-                      <th className="py-3.5 px-3 text-center">Aksi (CRUD)</th>
+                      <th className="py-3.5 px-3 text-center">
+                        {currentUser?.role === "coach" ? "Status Akses" : "Aksi (CRUD)"}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-100 font-medium">
@@ -2847,25 +2999,31 @@ export default function AdminDashboardPage() {
                             Rp {runningBal.toLocaleString("id-ID")}
                           </td>
                           <td className="py-3.5 px-3 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* Edit Transaksi Kas */}
-                              <button
-                                onClick={() => setEditingFinance(trx)}
-                                className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
-                                title="Edit Transaksi Kas"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
+                            {currentUser?.role === "coach" ? (
+                              <span className="px-2.5 py-1 rounded-lg bg-neutral-100 text-neutral-500 text-[10px] font-bold">
+                                Read Only
+                              </span>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1.5">
+                                {/* Edit Transaksi Kas */}
+                                <button
+                                  onClick={() => setEditingFinance(trx)}
+                                  className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                                  title="Edit Transaksi Kas"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
 
-                              {/* Hapus Transaksi Kas */}
-                              <button
-                                onClick={() => handleDeleteFinance(trx.id, trx.transactionCode)}
-                                className="p-1 text-neutral-400 hover:text-red-600 transition"
-                                title="Hapus transaksi"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                                {/* Hapus Transaksi Kas */}
+                                <button
+                                  onClick={() => handleDeleteFinance(trx.id, trx.transactionCode)}
+                                  className="p-1 text-neutral-400 hover:text-red-600 transition"
+                                  title="Hapus transaksi"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -2886,82 +3044,162 @@ export default function AdminDashboardPage() {
 
         {/* ================= TAB 6: KELOLA USER & STAF ================= */}
         {activeTab === "users" && (
-          <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden animate-fadeIn">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="bg-neutral-50/80 text-neutral-500 font-bold border-b border-neutral-200/80">
-                    <th className="py-3.5 px-4">Nama Lengkap & Username</th>
-                    <th className="py-3.5 px-4">Peran (Role)</th>
-                    <th className="py-3.5 px-4">Spesialisasi</th>
-                    <th className="py-3.5 px-4">Kontak Telepon / Email</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-100 font-medium">
-                  {systemUsersList.map((user) => (
-                    <tr key={user.id} className="hover:bg-neutral-50/80 transition">
-                      <td className="py-3.5 px-4">
-                        <p className="font-bold text-neutral-900">{user.fullName}</p>
-                        <p className="text-[11px] text-neutral-400 font-mono">@{user.username}</p>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                            user.role === "admin"
-                              ? "bg-purple-100 text-[#5E17EB]"
-                              : user.role === "coach"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-neutral-100 text-neutral-700"
-                          }`}
-                        >
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-neutral-700">{user.specialty || "-"}</td>
-                      <td className="py-3.5 px-4 font-mono text-neutral-500">
-                        {user.phoneNumber || "-"} • {user.email || "-"}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
-                          {user.status === "active" ? "Aktif" : user.status}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* Edit User */}
-                          <button
-                            onClick={() => setEditingUser(user)}
-                            className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
-                            title="Edit Data Akun Staf/Pelatih"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
+          <div className="space-y-4 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-xs">
+              <div>
+                <h3 className="font-extrabold text-neutral-900 text-sm">
+                  Kelola Pengguna Sistem (Staf & Pelatih)
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Otoritas superadmin untuk mengelola hak akses, kode pelatih, dan reset kata sandi pengguna.
+                </p>
+              </div>
 
-                          {/* Hapus User */}
-                          <button
-                            onClick={() => handleDeleteUser(user.id, user.fullName)}
-                            className="p-1 text-neutral-400 hover:text-red-600 transition"
-                            title="Hapus Pengguna"
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setIsAddUserOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-[#5E17EB] hover:bg-[#4d10c7] text-white rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah User Baru</span>
+                </button>
+
+                <button
+                  onClick={() => setIsResetCredentialsOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Reset Kredensial Akun</span>
+                </button>
+
+                <button
+                  onClick={handleExportStaffPdf}
+                  className="flex items-center gap-1.5 px-3.5 py-2 border border-neutral-200 hover:bg-neutral-50 text-neutral-700 rounded-xl text-xs font-bold transition shadow-sm"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Ekspor PDF</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[24px] border border-neutral-200/80 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-neutral-50/80 text-neutral-500 font-bold border-b border-neutral-200/80">
+                      <th className="py-3.5 px-4">Nama Lengkap & Username</th>
+                      <th className="py-3.5 px-4">Peran (Role)</th>
+                      <th className="py-3.5 px-4">Kode / Spesialisasi</th>
+                      <th className="py-3.5 px-4">Kontak Telepon / Email</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-4 text-center">Aksi Manajemen (CRUD)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 font-medium">
+                    {systemUsersList.map((user) => (
+                      <tr key={user.id} className="hover:bg-neutral-50/80 transition">
+                        <td className="py-3.5 px-4">
+                          <p className="font-bold text-neutral-900">{user.fullName}</p>
+                          <p className="text-[11px] text-neutral-400 font-mono">@{user.username}</p>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              user.role === "admin"
+                                ? "bg-purple-100 text-[#5E17EB]"
+                                : user.role === "coach"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-neutral-100 text-neutral-700"
+                            }`}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {systemUsersList.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-neutral-400">
-                        Belum ada data staf/pelatih.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-neutral-800">{user.specialty || "-"}</div>
+                          {user.coachCode && (
+                            <span className="font-mono text-[10px] text-[#5E17EB] font-bold">
+                              {user.coachCode}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-neutral-500">
+                          {user.phoneNumber || "-"} • {user.email || "-"}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">
+                            {user.status === "active" ? "Aktif" : user.status}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Reset Password Quick */}
+                            <button
+                              onClick={() => setIsResetCredentialsOpen(true)}
+                              className="p-1 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition"
+                              title="Reset Password Pengguna"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Edit User */}
+                            <button
+                              onClick={() => setEditingUser(user)}
+                              className="p-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                              title="Edit Data Akun Staf/Pelatih"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Hapus User */}
+                            <button
+                              onClick={() => handleDeleteUser(user.id, user.fullName)}
+                              className="p-1 text-neutral-400 hover:text-red-600 transition"
+                              title="Hapus Pengguna"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {systemUsersList.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-neutral-400">
+                          Belum ada data staf/pelatih.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* ================= TAB 7: PRESENSI & KEHADIRAN ================= */}
+        {activeTab === "attendance" && (
+          <AttendanceManagement
+            attendanceRecords={attendanceRecords}
+            attendanceStats={attendanceStats}
+            membersList={membersList}
+            systemUsersList={systemUsersList}
+            currentRole={currentUser?.role || "admin"}
+            onRefresh={fetchAllData}
+            showToast={showToast}
+          />
+        )}
+
+        {/* ================= TAB 8: ATUR KELAS LATIHAN ================= */}
+        {activeTab === "classes" && (
+          <ClassManagement
+            trainingClassesList={trainingClassesList}
+            membersList={membersList}
+            systemUsersList={systemUsersList}
+            currentRole={currentUser?.role || "admin"}
+            onRefresh={fetchAllData}
+            showToast={showToast}
+          />
         )}
       </main>
 
@@ -4795,6 +5033,25 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ================= MODAL: RESET KREDENSIAL MULTI-ROLE (ADMIN ONLY) ================= */}
+      <ResetCredentialsModal
+        isOpen={isResetCredentialsOpen}
+        onClose={() => setIsResetCredentialsOpen(false)}
+        membersList={membersList}
+        systemUsersList={systemUsersList}
+        showToast={showToast}
+        onSuccess={fetchAllData}
+      />
+
+      {/* ================= MODAL: PROFIL SAYA & UBAH PASSWORD ================= */}
+      <AdminProfileModal
+        isOpen={isAdminProfileOpen}
+        onClose={() => setIsAdminProfileOpen(false)}
+        currentUser={currentUser}
+        showToast={showToast}
+        onSuccess={fetchAllData}
+      />
     </div>
   );
 }

@@ -48,6 +48,21 @@ export interface StaffReportItem {
   createdAt: string;
 }
 
+export interface AttendanceReportItem {
+  id: number;
+  targetType: string;
+  targetId: string;
+  targetName: string;
+  className?: string | null;
+  ageCategory?: string | null;
+  attendanceDate: string;
+  status: string; // hadir | izin | sakit | alpha
+  checkInTime: string;
+  scanMethod: string;
+  recordedBy: string;
+  notes?: string | null;
+}
+
 const KOP_SURAT_HTML = `
   <div style="border-bottom: 3px double #111; padding-bottom: 12px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
     <div style="display: flex; align-items: center; gap: 14px;">
@@ -532,4 +547,148 @@ export function exportStaffReportPdf({
   `;
 
   triggerDirectDownloadPdf("Laporan_Staf_Pelatih_VOCA", content);
+}
+
+// 4. Export Laporan Presensi Kehadiran Siswa & Pelatih (Multi-Filter PDF)
+export function exportAttendanceReportPdf({
+  records,
+  filterDescription = "Semua Riwayat Presensi",
+  classificationFilter = "Semua Klasifikasi",
+  printedBy = "adminvoca",
+}: {
+  records: AttendanceReportItem[];
+  filterDescription?: string;
+  classificationFilter?: string;
+  printedBy?: string;
+}) {
+  const currentDate = new Date().toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const hadirCount = records.filter((r) => r.status === "hadir").length;
+  const izinCount = records.filter((r) => r.status === "izin").length;
+  const sakitCount = records.filter((r) => r.status === "sakit").length;
+  const alphaCount = records.filter((r) => r.status === "alpha").length;
+  const totalCount = records.length;
+  const attendanceRate = totalCount > 0 ? Math.round((hadirCount / totalCount) * 100) : 0;
+
+  const rowsHtml = records
+    .map((r, idx) => {
+      const dateStr = r.attendanceDate
+        ? new Date(r.attendanceDate).toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })
+        : "-";
+
+      const timeStr = r.checkInTime
+        ? new Date(r.checkInTime).toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "-";
+
+      let statusBadge = "";
+      if (r.status === "hadir") {
+        statusBadge = '<span style="display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 8.5px; font-weight: bold; background: #dcfce7; color: #15803d;">HADIR</span>';
+      } else if (r.status === "izin") {
+        statusBadge = '<span style="display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 8.5px; font-weight: bold; background: #dbeafe; color: #1d4ed8;">IZIN</span>';
+      } else if (r.status === "sakit") {
+        statusBadge = '<span style="display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 8.5px; font-weight: bold; background: #fef3c7; color: #b45309;">SAKIT</span>';
+      } else {
+        statusBadge = '<span style="display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 8.5px; font-weight: bold; background: #fee2e2; color: #b91c1c;">ALPHA</span>';
+      }
+
+      return `
+        <tr>
+          <td style="text-align: center; width: 25px;">${idx + 1}</td>
+          <td>
+            <div style="font-weight: bold; color: #111;">${escapeHtml(r.targetName)}</div>
+            <div style="font-family: monospace; font-size: 9px; color: #5E17EB;">
+              ${escapeHtml(r.targetId)} • <span style="text-transform: uppercase;">${escapeHtml(r.targetType)}</span>
+            </div>
+          </td>
+          <td>${escapeHtml(r.className || "-")}</td>
+          <td>${escapeHtml(r.ageCategory || "-")}</td>
+          <td style="text-align: center;">${dateStr} (${timeStr})</td>
+          <td style="text-align: center;">${statusBadge}</td>
+          <td style="font-size: 8.5px; color: #555;">${escapeHtml(r.scanMethod === "qr_code" ? "QR Code" : "Manual")} (@${escapeHtml(r.recordedBy)})</td>
+          <td style="font-size: 8.5px; color: #666;">${escapeHtml(r.notes || "-")}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const content = `
+    <div style="text-align: center; margin-bottom: 16px;">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -0.3px; text-transform: uppercase;">
+        REKAPITULASI PRESENSI KEHADIRAN ANGGOTA & PELATIH VOCA
+      </h2>
+      <p style="margin: 3px 0 0 0; font-size: 11px; font-weight: 600; color: #5E17EB;">
+        RENTANG: ${escapeHtml(filterDescription.toUpperCase())} • KLASIFIKASI: ${escapeHtml(classificationFilter.toUpperCase())}
+      </p>
+      <p style="margin: 2px 0 0 0; font-size: 9.5px; color: #6b7280;">
+        Waktu Cetak: ${currentDate} • Dicetak Oleh: @${escapeHtml(printedBy)}
+      </p>
+    </div>
+
+    <!-- Ringkasan Statistik Kehadiran -->
+    <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+      <div class="kpi-card">
+        <div class="kpi-title">Tingkat Kehadiran</div>
+        <div class="kpi-value" style="color: #16a34a;">${attendanceRate}%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Total Hadir</div>
+        <div class="kpi-value" style="color: #15803d;">${hadirCount} Sesi</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Total Izin</div>
+        <div class="kpi-value" style="color: #2563eb;">${izinCount} Sesi</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Total Sakit</div>
+        <div class="kpi-value" style="color: #d97706;">${sakitCount} Sesi</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Total Alpha</div>
+        <div class="kpi-value" style="color: #dc2626;">${alphaCount} Sesi</div>
+      </div>
+    </div>
+
+    <!-- Tabel Rekapitulasi Presensi -->
+    <table>
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Nama & ID Target</th>
+          <th>Kelas</th>
+          <th>Kelompok Usia</th>
+          <th style="text-align: center;">Tanggal & Waktu</th>
+          <th style="text-align: center;">Status</th>
+          <th>Metode</th>
+          <th>Catatan / Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml || '<tr><td colspan="8" style="text-align: center; padding: 20px; color: #9ca3af;">Tidak ada catatan presensi pada rentang filter ini.</td></tr>'}
+      </tbody>
+    </table>
+
+    <div class="signatures">
+      <div class="sign-box">
+        <p style="margin: 0; color: #555;">Petugas Presensi,</p>
+        <div class="sign-line">Staf Sekretariat VOCA</div>
+      </div>
+      <div class="sign-box">
+        <p style="margin: 0; color: #555;">Mengetahui & Mengesahkan,</p>
+        <div class="sign-line">Head Coach VOCA</div>
+      </div>
+    </div>
+  `;
+
+  triggerDirectDownloadPdf(`Laporan_Presensi_VOCA_${new Date().toISOString().slice(0, 10)}`, content);
 }

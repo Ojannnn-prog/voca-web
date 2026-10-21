@@ -48,13 +48,95 @@ export async function createAdminSessionToken(): Promise<string> {
   return `${payload}.${signature}`;
 }
 
-// 2. Verifikasi token sesi Admin
+export interface StaffUserSession {
+  userId?: number;
+  username: string;
+  fullName: string;
+  role: "admin" | "staff" | "coach";
+  coachCode?: string | null;
+  specialty?: string | null;
+}
+
+// 1.1 Buat token sesi Pengguna Sistem (Admin, Staf, Coach) bertanda tangan digital
+export async function createSystemUserSessionToken(user: StaffUserSession): Promise<string> {
+  const timestamp = Date.now().toString();
+  const randomSalt = Math.random().toString(36).substring(2, 10);
+  const data = JSON.stringify({
+    userId: user.userId,
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+    coachCode: user.coachCode || null,
+    specialty: user.specialty || null,
+    timestamp,
+    salt: randomSalt,
+  });
+  // Encoding base64url aman
+  const encoded = Buffer.from(data, "utf8").toString("base64url");
+  const payload = `voca_sysuser:${encoded}`;
+  const signature = await generateHmacSignature(payload);
+  return `${payload}.${signature}`;
+}
+
+// 1.2 Verifikasi token sesi Pengguna Sistem
+export async function verifySystemUserSessionToken(token?: string | null): Promise<StaffUserSession | null> {
+  if (!token || !token.includes(".")) return null;
+
+  const lastDotIndex = token.lastIndexOf(".");
+  const payload = token.substring(0, lastDotIndex);
+  const providedSignature = token.substring(lastDotIndex + 1);
+
+  // Dukungan backward compatibility jika token adalah token admin legacy
+  if (payload.startsWith("voca_admin:")) {
+    const isValid = await verifyAdminSessionToken(token);
+    if (isValid) {
+      return {
+        username: "adminvoca",
+        fullName: "Administrator Utama",
+        role: "admin",
+      };
+    }
+    return null;
+  }
+
+  if (!payload.startsWith("voca_sysuser:")) return null;
+
+  const encoded = payload.replace("voca_sysuser:", "");
+  try {
+    const raw = Buffer.from(encoded, "base64url").toString("utf8");
+    const parsed = JSON.parse(raw);
+    const tokenTime = parseInt(parsed.timestamp, 10);
+    const maxAge = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - tokenTime > maxAge) return null;
+
+    const expectedSignature = await generateHmacSignature(payload);
+    if (expectedSignature !== providedSignature) return null;
+
+    return {
+      userId: parsed.userId,
+      username: parsed.username,
+      fullName: parsed.fullName,
+      role: parsed.role,
+      coachCode: parsed.coachCode,
+      specialty: parsed.specialty,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// 2. Verifikasi token sesi Admin (menerima session admin murni atau session staff/coach untuk akses portal manajemen)
 export async function verifyAdminSessionToken(token?: string | null): Promise<boolean> {
   if (!token || !token.includes(".")) return false;
 
   const lastDotIndex = token.lastIndexOf(".");
   const payload = token.substring(0, lastDotIndex);
   const providedSignature = token.substring(lastDotIndex + 1);
+
+  if (payload.startsWith("voca_sysuser:")) {
+    const sysUser = await verifySystemUserSessionToken(token);
+    return Boolean(sysUser && (sysUser.role === "admin" || sysUser.role === "staff" || sysUser.role === "coach"));
+  }
 
   if (!payload.startsWith("voca_admin:")) return false;
 

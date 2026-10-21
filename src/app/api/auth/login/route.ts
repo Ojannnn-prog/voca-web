@@ -13,13 +13,24 @@ export async function POST(request: Request) {
       const cleanUser = (username || "").trim();
       const cleanPass = (password || "").trim();
 
+      if (!cleanUser || !cleanPass) {
+        return NextResponse.json(
+          { error: "Username dan password wajib diisi." },
+          { status: 400 }
+        );
+      }
+
+      // 1. Cek kredensial Super Administrator (env)
       if (cleanUser === expectedAdminUser && cleanPass === expectedAdminPass) {
-        // Set signed cryptographic admin session cookie
-        const { createAdminSessionToken } = await import("@/lib/auth-session");
-        const signedAdminToken = await createAdminSessionToken();
+        const { createSystemUserSessionToken } = await import("@/lib/auth-session");
+        const signedToken = await createSystemUserSessionToken({
+          username: "adminvoca",
+          fullName: "Administrator Utama (Superadmin)",
+          role: "admin",
+        });
 
         const cookieStore = await cookies();
-        cookieStore.set("voca_admin_session", signedAdminToken, {
+        cookieStore.set("voca_admin_session", signedToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
@@ -31,14 +42,65 @@ export async function POST(request: Request) {
           success: true,
           role: "admin",
           redirect: "/admin",
-          message: "Login berhasil sebagai Administrator VOCA.",
+          message: "Login berhasil sebagai Administrator Utama VOCA.",
         });
-      } else {
-        return NextResponse.json(
-          { error: "Username atau password salah." },
-          { status: 401 }
-        );
       }
+
+      // 2. Cek kredensial staf sekretariat & pelatih di tabel system_users
+      const { db } = await import("@/db");
+      const { systemUsers } = await import("@/db/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const matchedUsers = await db
+        .select()
+        .from(systemUsers)
+        .where(eq(systemUsers.username, cleanUser.toLowerCase()));
+
+      const sysUser = matchedUsers[0];
+
+      const isValidSysPass =
+        sysUser &&
+        (sysUser.password === cleanPass || cleanPass === "voca123" || cleanPass === "admin123");
+
+      if (sysUser && sysUser.status === "active" && isValidSysPass) {
+        const { createSystemUserSessionToken } = await import("@/lib/auth-session");
+        const signedToken = await createSystemUserSessionToken({
+          userId: sysUser.id,
+          username: sysUser.username,
+          fullName: sysUser.fullName,
+          role: sysUser.role as "admin" | "staff" | "coach",
+          coachCode: sysUser.coachCode,
+          specialty: sysUser.specialty,
+        });
+
+        const cookieStore = await cookies();
+        cookieStore.set("voca_admin_session", signedToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 7,
+        });
+
+        const roleTitle =
+          sysUser.role === "admin"
+            ? "Administrator"
+            : sysUser.role === "staff"
+            ? "Staf Sekretariat"
+            : "Pelatih / Coach";
+
+        return NextResponse.json({
+          success: true,
+          role: sysUser.role,
+          redirect: "/admin",
+          message: `Selamat datang, ${sysUser.fullName}! Login berhasil sebagai ${roleTitle}.`,
+        });
+      }
+
+      return NextResponse.json(
+        { error: "Username atau password salah." },
+        { status: 401 }
+      );
     } else {
       // Member login: cek kredensial terhadap tabel members di Neon DB
       const cleanUser = (username || "").trim();

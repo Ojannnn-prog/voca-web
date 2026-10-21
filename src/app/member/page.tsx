@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useSearchParams, useRouter } from "next/navigation";
 import { VocaLogo } from "@/components/common/VocaLogo";
 import { KtaCard } from "@/components/common/KtaCard";
+import { generateQrDataUrl, createMemberQrPayload } from "@/lib/qr-generator";
 import {
   User,
   Calendar,
@@ -32,6 +33,10 @@ import {
   Copy,
   CheckCheck,
   Camera,
+  KeyRound,
+  Sparkles,
+  MapPin,
+  Flame,
 } from "lucide-react";
 
 interface MemberData {
@@ -111,6 +116,31 @@ function MemberPortalContent() {
   const [isUpdatingPhoto, setIsUpdatingPhoto] = useState(false);
   const [photoUpdateSuccess, setPhotoUpdateSuccess] = useState("");
 
+  // Jadwal Kelas & Kalender Latihan
+  const [scheduleData, setScheduleData] = useState<{
+    enrolled: boolean;
+    classInfo?: any;
+    roster?: any;
+  } | null>(null);
+
+  // Quick Attendance QR Modal
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [memberQrCodeUrl, setMemberQrCodeUrl] = useState<string>("");
+
+  // Edit Profil & Password Mandiri States
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    fullName: "",
+    phoneNumber: "",
+    username: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSuccessMsg, setProfileSuccessMsg] = useState("");
+  const [profileErrorMsg, setProfileErrorMsg] = useState("");
+
   const handleMemberPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentMember) return;
@@ -184,6 +214,31 @@ function MemberPortalContent() {
         setCurrentMember(data.member);
         setInvoices(data.invoices || []);
         setTransactions(data.transactions || []);
+
+        setProfileForm({
+          fullName: data.member.fullName || "",
+          phoneNumber: data.member.phoneNumber || "",
+          username: data.member.username || "",
+          currentPassword: "",
+          newPassword: "",
+          confirmPassword: "",
+        });
+
+        // Generate QR Code
+        const qrPayload = createMemberQrPayload({
+          memberId: data.member.memberId,
+          fullName: data.member.fullName,
+          ageCategory: data.member.ageCategory,
+        });
+        generateQrDataUrl(qrPayload).then((url) => setMemberQrCodeUrl(url));
+
+        // Load schedule
+        fetch("/api/member/schedule")
+          .then((r) => r.json())
+          .then((sched) => {
+            if (sched.success) setScheduleData(sched);
+          })
+          .catch(() => {});
       } else {
         setErrorMessage(data.error || "Data anggota tidak ditemukan.");
       }
@@ -212,6 +267,31 @@ function MemberPortalContent() {
             setCurrentMember(data.member);
             setInvoices(data.invoices || []);
             setTransactions(data.transactions || []);
+
+            setProfileForm({
+              fullName: data.member.fullName || "",
+              phoneNumber: data.member.phoneNumber || "",
+              username: data.member.username || "",
+              currentPassword: "",
+              newPassword: "",
+              confirmPassword: "",
+            });
+
+            // Generate QR Code
+            const qrPayload = createMemberQrPayload({
+              memberId: data.member.memberId,
+              fullName: data.member.fullName,
+              ageCategory: data.member.ageCategory,
+            });
+            generateQrDataUrl(qrPayload).then((url) => setMemberQrCodeUrl(url));
+
+            // Load schedule
+            fetch("/api/member/schedule")
+              .then((r) => r.json())
+              .then((sched) => {
+                if (sched.success) setScheduleData(sched);
+              })
+              .catch(() => {});
           } else {
             setErrorMessage(data.error || "Data anggota tidak ditemukan.");
           }
@@ -227,6 +307,55 @@ function MemberPortalContent() {
       ignore = true;
     };
   }, [initialId, router]);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    setProfileSuccessMsg("");
+    setProfileErrorMsg("");
+
+    if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmPassword) {
+      setProfileErrorMsg("Konfirmasi password baru tidak cocok.");
+      setIsSavingProfile(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: profileForm.fullName,
+          phoneNumber: profileForm.phoneNumber,
+          username: profileForm.username,
+          currentPassword: profileForm.currentPassword,
+          newPassword: profileForm.newPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal memperbarui profil.");
+      }
+
+      setProfileSuccessMsg("Profil dan password Anda berhasil diperbarui!");
+      if (currentMember) {
+        setCurrentMember({
+          ...currentMember,
+          fullName: profileForm.fullName,
+          phoneNumber: profileForm.phoneNumber,
+        });
+      }
+      setTimeout(() => {
+        setIsProfileModalOpen(false);
+        setProfileSuccessMsg("");
+      }, 2000);
+    } catch (err: any) {
+      setProfileErrorMsg(err.message || "Terjadi kesalahan.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -378,7 +507,27 @@ function MemberPortalContent() {
         </div>
 
         {currentMember && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Quick QR Presensi Button */}
+            <button
+              onClick={() => setIsQrModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-[#5E17EB] hover:bg-purple-100 text-xs font-bold border border-purple-200 transition shadow-sm"
+              title="Tampilkan QR Code Presensi"
+            >
+              <QrCode className="w-4 h-4 text-[#5E17EB]" />
+              <span className="hidden sm:inline">QR Presensi</span>
+            </button>
+
+            {/* Edit Profil Button */}
+            <button
+              onClick={() => setIsProfileModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 text-xs font-bold transition"
+              title="Edit Profil & Password"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Profil & Password</span>
+            </button>
+
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-neutral-900">{currentMember.fullName}</p>
               <p className="text-[10px] text-neutral-500 font-mono">{currentMember.memberId}</p>
@@ -444,7 +593,7 @@ function MemberPortalContent() {
               {[
                 { id: "overview", label: "Ringkasan Profil", icon: User },
                 { id: "kta", label: "KTA Digital (ID-1)", icon: CreditCard },
-                { id: "events", label: "Agenda & Presensi", icon: Calendar },
+                { id: "events", label: "Jadwal & Kalender Latihan", icon: Calendar },
                 {
                   id: "finance",
                   label: "Kas & Iuran Bulanan",
@@ -635,27 +784,229 @@ function MemberPortalContent() {
               </div>
             )}
 
-            {/* TAB 3: AGENDA & PRESENSI */}
+            {/* TAB 3: JADWAL KELAS & KALENDER LATIHAN */}
             {activeTab === "events" && (
-              <div className="space-y-4 animate-fadeIn">
-                <h2 className="text-xl font-bold text-neutral-900">Agenda Kegiatan & Latihan Rutin</h2>
-                <div className="space-y-3">
+              <div className="space-y-6 animate-fadeIn">
+                {/* Header Section */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-neutral-900">
+                      Papan Informasi & Kalender Latihan
+                    </h2>
+                    <p className="text-xs text-neutral-500">
+                      Jadwal resmi latihan renang dan atletik bulanan Anda di VOCA Club.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsQrModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#5E17EB] text-white hover:bg-[#4d10c7] text-xs font-bold transition shadow-md shadow-purple-500/20 shrink-0"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    <span>Tampilkan QR Presensi</span>
+                  </button>
+                </div>
+
+                {/* Status Kelas Latihan Terdaftar */}
+                {scheduleData?.enrolled && scheduleData.classInfo ? (
+                  <div className="bg-gradient-to-br from-white to-purple-50/40 rounded-3xl p-6 sm:p-7 border border-purple-100 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-purple-100/80">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-[#5E17EB]/10 text-[#5E17EB] flex items-center justify-center font-black text-2xl shrink-0">
+                          🏊
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-extrabold text-neutral-900">
+                              {scheduleData.classInfo.className}
+                            </h3>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-[#5E17EB]">
+                              {scheduleData.classInfo.classType === "private_premium"
+                                ? "Private Premium"
+                                : "Reguler"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-neutral-500">
+                            Kelompok: <strong>{scheduleData.classInfo.ageGroup}</strong> • Cabang: <strong>{scheduleData.classInfo.sportBranch}</strong>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Roster Aktif Terdaftar</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                      <div className="bg-white p-3.5 rounded-2xl border border-neutral-100 shadow-xs">
+                        <p className="text-neutral-400 font-semibold mb-1 flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-[#5E17EB]" />
+                          <span>Pelatih Pembimbing</span>
+                        </p>
+                        <p className="font-extrabold text-neutral-800 text-sm">{scheduleData.classInfo.coachName}</p>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-2xl border border-neutral-100 shadow-xs">
+                        <p className="text-neutral-400 font-semibold mb-1 flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-[#5E17EB]" />
+                          <span>Hari Latihan</span>
+                        </p>
+                        <p className="font-extrabold text-neutral-800 text-sm">{scheduleData.classInfo.days}</p>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-2xl border border-neutral-100 shadow-xs">
+                        <p className="text-neutral-400 font-semibold mb-1 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-[#5E17EB]" />
+                          <span>Jam & Sesi</span>
+                        </p>
+                        <p className="font-extrabold text-neutral-800 text-sm">{scheduleData.classInfo.sessionTime}</p>
+                      </div>
+
+                      <div className="bg-white p-3.5 rounded-2xl border border-neutral-100 shadow-xs">
+                        <p className="text-neutral-400 font-semibold mb-1 flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-[#5E17EB]" />
+                          <span>Lokasi Latihan</span>
+                        </p>
+                        <p className="font-extrabold text-neutral-800 text-sm truncate">{scheduleData.classInfo.venue}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-amber-50/70 border border-amber-200/80 rounded-3xl p-6 sm:p-8 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                      <Clock className="w-6 h-6" />
+                    </div>
+                    <h3 className="font-bold text-neutral-900 text-sm sm:text-base">
+                      Penjadwalan Kelas Latihan Sedang Diproses
+                    </h3>
+                    <p className="text-xs text-neutral-600 max-w-md mx-auto leading-relaxed">
+                      Sistem kami sedang mengelompokkan jadwal terbaik untuk Anda berdasarkan usia dan paket keanggotaan. Silakan konfirmasi ketersediaan slot melalui WhatsApp Admin.
+                    </p>
+                    <a
+                      href="https://wa.me/6287887964978?text=Halo%20Admin%20VOCA,%20saya%20ingin%20konfirmasi%20jadwal%20kelas%20latihan%20saya."
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                    >
+                      <span>Hubungi WhatsApp Admin (0878-8796-4978)</span>
+                    </a>
+                  </div>
+                )}
+
+                {/* Papan Kalender Latihan Bulanan */}
+                <div className="bg-white rounded-3xl p-6 sm:p-7 border border-neutral-200/80 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-neutral-100">
+                    <div>
+                      <h3 className="text-base font-extrabold text-neutral-900 flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-[#5E17EB]" />
+                        <span>Papan Kalender Latihan — {new Date().toLocaleDateString("id-ID", { month: "long", year: "numeric" })}</span>
+                      </h3>
+                      <p className="text-[11px] text-neutral-500">
+                        Jadwal tanggal latihan renang & atletik Anda ditandai dengan warna ungu.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-md bg-[#5E17EB]" />
+                        <span className="text-neutral-600 font-semibold">Jadwal Latihan VOCA</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-md bg-neutral-100 border border-neutral-200" />
+                        <span className="text-neutral-400">Hari Bebas</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Kalender Grid 1 Bulan */}
+                  <div className="grid grid-cols-7 gap-1.5 sm:gap-2 text-center text-xs">
+                    {["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"].map((dayName, dIdx) => (
+                      <div key={dIdx} className="font-bold text-neutral-400 py-1 text-[11px]">
+                        {dayName}
+                      </div>
+                    ))}
+
+                    {/* Generate Days of the Current Month */}
+                    {(() => {
+                      const now = new Date();
+                      const year = now.getFullYear();
+                      const month = now.getMonth();
+                      const daysInMonth = new Date(year, month + 1, 0).getDate();
+                      const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7; // Monday=0, Sunday=6
+
+                      const daysElements = [];
+
+                      for (let i = 0; i < firstDayIndex; i++) {
+                        daysElements.push(
+                          <div key={`empty-${i}`} className="h-16 sm:h-20 bg-neutral-50/50 rounded-xl" />
+                        );
+                      }
+
+                      const classDaysStr = (scheduleData?.classInfo?.days || "").toLowerCase();
+                      const dayNamesId = ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"];
+
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        const dateObj = new Date(year, month, day);
+                        const dayOfWeek = (dateObj.getDay() + 6) % 7;
+                        const currentDayName = dayNamesId[dayOfWeek];
+                        const isTrainingDay = scheduleData?.enrolled && classDaysStr.includes(currentDayName);
+                        const isToday = day === now.getDate();
+
+                        daysElements.push(
+                          <div
+                            key={`day-${day}`}
+                            className={`h-16 sm:h-20 rounded-xl p-1.5 sm:p-2 flex flex-col justify-between transition border text-left ${
+                              isTrainingDay
+                                ? "bg-purple-50/80 border-[#5E17EB]/40 shadow-xs ring-1 ring-[#5E17EB]/20"
+                                : isToday
+                                ? "bg-blue-50/40 border-blue-200"
+                                : "bg-neutral-50/40 border-neutral-100 hover:bg-neutral-100/50"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span
+                                className={`text-xs font-bold ${
+                                  isTrainingDay
+                                    ? "text-[#5E17EB]"
+                                    : isToday
+                                    ? "text-blue-600"
+                                    : "text-neutral-700"
+                                }`}
+                              >
+                                {day}
+                              </span>
+                              {isToday && (
+                                <span className="text-[8px] font-bold px-1 py-0.2 bg-blue-100 text-blue-700 rounded">
+                                  Hari Ini
+                                </span>
+                              )}
+                            </div>
+
+                            {isTrainingDay && (
+                              <div className="mt-auto">
+                                <span className="hidden sm:inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#5E17EB] text-white truncate max-w-full">
+                                  🏊 Latihan
+                                </span>
+                                <span className="sm:hidden w-2 h-2 rounded-full bg-[#5E17EB] block mx-auto" />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      return daysElements;
+                    })()}
+                  </div>
+                </div>
+
+                {/* Kegiatan Tambahan */}
+                <div className="space-y-3 pt-2">
+                  <h3 className="font-bold text-neutral-800 text-sm">Agenda & Try-Out Terjadwal</h3>
                   {[
-                    {
-                      title: "Latihan Teknik Akuatik & Renang Gaya Dada",
-                      date: "Sabtu, 24 Oktober 2026",
-                      time: "07:30 - 09:30 WIB",
-                      location: "Kolam Renang Pusat VOCA",
-                      type: "Latihan Rutin",
-                      rsvp: true,
-                    },
                     {
                       title: "Simulasi Tes Kesamaptaan Jasmani & Ketahanan Fisik",
                       date: "Minggu, 1 November 2026",
                       time: "06:30 - 10:00 WIB",
-                      location: "Stadion & Kolam Prestasi",
-                      type: "Persiapan TNI/POLRI",
-                      rsvp: false,
+                      location: "Stadion & Kolam Prestasi VOCA",
+                      type: "Persiapan Fisik",
                     },
                   ].map((ev, i) => (
                     <div
@@ -666,20 +1017,14 @@ function MemberPortalContent() {
                         <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-50 text-[#21649D]">
                           {ev.type}
                         </span>
-                        <h3 className="text-base font-bold text-neutral-900">{ev.title}</h3>
+                        <h4 className="text-sm font-bold text-neutral-900">{ev.title}</h4>
                         <p className="text-xs text-neutral-500">
                           📅 {ev.date} • ⏰ {ev.time} • 📍 {ev.location}
                         </p>
                       </div>
-                      <button
-                        className={`px-5 py-2.5 rounded-full text-xs font-bold transition shrink-0 ${
-                          ev.rsvp
-                            ? "bg-emerald-100 text-emerald-700 cursor-default"
-                            : "bg-[#21649D] text-white hover:bg-[#1b5383]"
-                        }`}
-                      >
-                        {ev.rsvp ? "✓ Terdaftar Hadir" : "Konfirmasi Hadir"}
-                      </button>
+                      <span className="px-4 py-2 bg-neutral-100 text-neutral-700 rounded-xl text-xs font-semibold self-start sm:self-center">
+                        Terbuka untuk Seluruh Anggota
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1229,6 +1574,190 @@ function MemberPortalContent() {
             >
               Tutup
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL QR CODE PRESENSI CEPAT ================= */}
+      {isQrModalOpen && currentMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-6 sm:p-7 shadow-2xl text-center space-y-5 border border-purple-100">
+            <button
+              onClick={() => setIsQrModalOpen(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#5E17EB] bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
+                Presensi Kehadiran Latihan
+              </span>
+              <h3 className="text-lg font-extrabold text-neutral-900 mt-2">
+                QR Code KTA Anggota
+              </h3>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Tunjukkan QR Code ini kepada Pelatih atau Staf di venue latihan.
+              </p>
+            </div>
+
+            <div className="w-56 h-56 mx-auto bg-neutral-50 p-3 rounded-2xl border-2 border-dashed border-[#5E17EB]/40 flex items-center justify-center shadow-inner">
+              {memberQrCodeUrl ? (
+                <img
+                  src={memberQrCodeUrl}
+                  alt="QR Code Presensi"
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <Loader2 className="w-8 h-8 animate-spin text-[#5E17EB]" />
+              )}
+            </div>
+
+            <div className="p-3 bg-neutral-50 rounded-2xl text-xs space-y-1">
+              <p className="font-bold text-neutral-900">{currentMember.fullName}</p>
+              <p className="font-mono text-[#5E17EB] font-bold">{currentMember.memberId}</p>
+              <p className="text-[11px] text-neutral-500">{currentMember.ageCategory} • {currentMember.sportBranch}</p>
+            </div>
+
+            <button
+              onClick={() => setIsQrModalOpen(false)}
+              className="w-full py-2.5 bg-[#5E17EB] text-white rounded-xl text-xs font-bold hover:bg-[#4d10c7] transition shadow-md shadow-purple-500/20"
+            >
+              Selesai Ditunjukkan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL EDIT PROFIL & GANTI PASSWORD ================= */}
+      {isProfileModalOpen && currentMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl space-y-4 border border-neutral-200">
+            <button
+              onClick={() => {
+                setIsProfileModalOpen(false);
+                setProfileErrorMsg("");
+                setProfileSuccessMsg("");
+              }}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <h3 className="text-base font-extrabold text-neutral-900">
+                Edit Profil & Kredensial Akun
+              </h3>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Perbarui nama, nomor telepon, username, atau ganti kata sandi Anda.
+              </p>
+            </div>
+
+            {profileSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{profileSuccessMsg}</span>
+              </div>
+            )}
+
+            {profileErrorMsg && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{profileErrorMsg}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">Nama Lengkap</label>
+                <input
+                  type="text"
+                  required
+                  value={profileForm.fullName}
+                  onChange={(e) => setProfileForm({ ...profileForm, fullName: e.target.value })}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium focus:ring-2 focus:ring-[#5E17EB] focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">No. WhatsApp</label>
+                  <input
+                    type="tel"
+                    required
+                    value={profileForm.phoneNumber}
+                    onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium focus:ring-2 focus:ring-[#5E17EB] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-neutral-700 mb-1">Username Login</label>
+                  <input
+                    type="text"
+                    required
+                    value={profileForm.username}
+                    onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                    className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl font-medium focus:ring-2 focus:ring-[#5E17EB] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-neutral-100">
+                <p className="font-bold text-neutral-800 mb-2">Ubah Kata Sandi (Opsional)</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-neutral-500 mb-0.5">Password Saat Ini (Lama)</label>
+                    <input
+                      type="password"
+                      placeholder="Masukkan jika ingin ganti password"
+                      value={profileForm.currentPassword}
+                      onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
+                      className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-[#5E17EB] focus:outline-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-neutral-500 mb-0.5">Password Baru</label>
+                      <input
+                        type="password"
+                        placeholder="Minimal 6 karakter"
+                        value={profileForm.newPassword}
+                        onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
+                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-[#5E17EB] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-neutral-500 mb-0.5">Ulangi Password</label>
+                      <input
+                        type="password"
+                        placeholder="Ketik ulang password"
+                        value={profileForm.confirmPassword}
+                        onChange={(e) => setProfileForm({ ...profileForm, confirmPassword: e.target.value })}
+                        className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl focus:ring-2 focus:ring-[#5E17EB] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => setIsProfileModalOpen(false)}
+                  className="px-4 py-2 text-neutral-600 hover:bg-neutral-100 font-bold rounded-xl transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="px-5 py-2 bg-[#5E17EB] hover:bg-[#4d10c7] text-white font-bold rounded-xl shadow-md shadow-purple-500/20 disabled:opacity-50 transition flex items-center gap-1.5"
+                >
+                  {isSavingProfile && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

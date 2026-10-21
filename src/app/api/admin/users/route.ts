@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { username, fullName, role, email, phoneNumber, specialty } = body;
+    const { username, fullName, role, email, phoneNumber, specialty, password } = body;
 
     if (!username || !fullName || !role) {
       return NextResponse.json(
@@ -58,12 +58,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // Generate coachCode otomatis jika role adalah coach
+    let coachCode = null;
+    if (role === "coach") {
+      const allCoaches = await db.select().from(systemUsers).where(eq(systemUsers.role, "coach"));
+      const nextNum = allCoaches.length + 1;
+      coachCode = `COACH-${String(nextNum).padStart(3, "0")}`;
+    }
+
     const [newUser] = await db
       .insert(systemUsers)
       .values({
         username: cleanUser,
+        password: password ? password.trim() : "voca123",
         fullName: fullName.trim(),
         role,
+        coachCode,
         email: email ? email.trim() : null,
         phoneNumber: phoneNumber ? phoneNumber.trim() : null,
         specialty: specialty ? specialty.trim() : null,
@@ -74,7 +84,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       user: newUser,
-      message: `Akun ${fullName} (${role}) berhasil ditambahkan.`,
+      message: `Akun ${fullName} (${role}) berhasil ditambahkan.${coachCode ? ` Kode Pelatih: ${coachCode}` : ""}`,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -90,7 +100,7 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, status, fullName, role, email, phoneNumber, specialty } = body;
+    const { id, status, fullName, role, email, phoneNumber, specialty, password, coachCode } = body;
 
     if (!id) {
       return NextResponse.json({ error: "ID pengguna wajib disertakan." }, { status: 400 });
@@ -103,6 +113,8 @@ export async function PATCH(request: Request) {
     if (email !== undefined) updateFields.email = email ? email.trim() : null;
     if (phoneNumber !== undefined) updateFields.phoneNumber = phoneNumber ? phoneNumber.trim() : null;
     if (specialty !== undefined) updateFields.specialty = specialty ? specialty.trim() : null;
+    if (password !== undefined && password.trim() !== "") updateFields.password = password.trim();
+    if (coachCode !== undefined) updateFields.coachCode = coachCode ? coachCode.trim() : null;
 
     const [updated] = await db
       .update(systemUsers)

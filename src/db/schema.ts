@@ -78,8 +78,10 @@ export const financeTransactions = pgTable("finance_transactions", {
 export const systemUsers = pgTable("system_users", {
   id: serial("id").primaryKey(),
   username: varchar("username", { length: 100 }).notNull().unique(),
+  password: varchar("password", { length: 100 }).default("voca123").notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull(), // admin | coach | staff
+  coachCode: varchar("coach_code", { length: 50 }), // COACH-001, COACH-002, dll.
   email: varchar("email", { length: 255 }),
   phoneNumber: varchar("phone_number", { length: 50 }),
   specialty: varchar("specialty", { length: 100 }), // Pelatih Renang, Pelatih Motorik, Bendahara, dll.
@@ -87,7 +89,55 @@ export const systemUsers = pgTable("system_users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// 5. Tabel Preset Metrik Evaluasi untuk Bento Chart
+// 5. Tabel Presensi Kehadiran Siswa & Pelatih
+export const attendanceRecords = pgTable("attendance_records", {
+  id: serial("id").primaryKey(),
+  targetType: varchar("target_type", { length: 20 }).notNull(), // "member" | "coach"
+  targetId: varchar("target_id", { length: 50 }).notNull(), // ID Anggota (VOCA-2026-xxx) atau ID Pelatih (COACH-xxx)
+  targetName: varchar("target_name", { length: 255 }).notNull(),
+  classId: integer("class_id"), // Relasi opsional ke training_classes
+  className: varchar("class_name", { length: 150 }), // Contoh: "VOCA Child 1"
+  ageCategory: varchar("age_category", { length: 50 }), // Balita | Anak-anak | Remaja | Dewasa | Casis TNI/Polri
+  attendanceDate: timestamp("attendance_date").defaultNow().notNull(),
+  status: varchar("status", { length: 20 }).default("hadir").notNull(), // hadir | izin | sakit | alpha
+  checkInTime: timestamp("check_in_time").defaultNow().notNull(),
+  scanMethod: varchar("scan_method", { length: 20 }).default("qr_code").notNull(), // qr_code | manual
+  recordedBy: varchar("recorded_by", { length: 100 }).notNull(), // adminvoca / nama penginput
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 6. Tabel Master Kelas Latihan (Atur Kelas)
+export const trainingClasses = pgTable("training_classes", {
+  id: serial("id").primaryKey(),
+  className: varchar("class_name", { length: 150 }).notNull(), // Contoh: "VOCA Child 1", "VOCA Teen 3"
+  classType: varchar("class_type", { length: 50 }).default("reguler").notNull(), // reguler | private_premium
+  ageGroup: varchar("age_group", { length: 50 }).notNull(), // Balita | Anak-anak | Remaja | Dewasa | Casis TNI/Polri | Semua Usia
+  sportBranch: varchar("sport_branch", { length: 100 }).default("Renang & Akuatik").notNull(),
+  coachId: integer("coach_id"), // Relasi ke system_users.id (role coach)
+  coachName: varchar("coach_name", { length: 255 }).notNull(),
+  days: text("days").notNull(), // Contoh: "Senin, Kamis" atau "Selasa, Jumat"
+  sessionTime: varchar("session_time", { length: 100 }).notNull(), // Contoh: "Sesi 2 (15:30 - 17:00 WIB)"
+  venue: varchar("venue", { length: 255 }).default("Kolam Renang VOCA").notNull(),
+  maxCapacity: integer("max_capacity").default(12).notNull(),
+  notes: text("notes"),
+  status: varchar("status", { length: 20 }).default("active").notNull(), // active | inactive
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 7. Tabel Roster Siswa per Kelas (Dengan Validasi Anti-Duplikasi)
+export const classRoster = pgTable("class_roster", {
+  id: serial("id").primaryKey(),
+  classId: integer("class_id").notNull(), // Relasi ke trainingClasses.id
+  memberId: varchar("member_id", { length: 50 }).notNull(), // ID Anggota (VOCA-2026-xxx)
+  memberName: varchar("member_name", { length: 255 }).notNull(),
+  ageCategory: varchar("age_category", { length: 50 }).notNull(),
+  participantAge: integer("participant_age"),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  assignedBy: varchar("assigned_by", { length: 100 }).notNull(),
+});
+
+// 8. Tabel Preset Metrik Evaluasi untuk Bento Chart
 export const analyticsPresets = pgTable("analytics_presets", {
   id: serial("id").primaryKey(),
   timeframe: varchar("timeframe", { length: 20 }).notNull(), // level1 | level2 | level3 | level4 | level5
@@ -99,7 +149,7 @@ export const analyticsPresets = pgTable("analytics_presets", {
   pinkPathD: text("pink_path_d").notNull(),
 });
 
-// 6. Tabel Demografi Peserta
+// 9. Tabel Demografi Peserta
 export const audienceDemographics = pgTable("audience_demographics", {
   id: serial("id").primaryKey(),
   category: varchar("category", { length: 100 }).notNull(),

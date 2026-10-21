@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { VocaLogo } from "@/components/common/VocaLogo";
-import { QrCode, Download, RotateCw, CheckCircle2, Loader2, Printer } from "lucide-react";
+import { QrCode, Download, RotateCw, CheckCircle2, Loader2, Printer, Eye } from "lucide-react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { generateQrDataUrl, createMemberQrPayload } from "@/lib/qr-generator";
 
 export interface KtaMemberData {
   fullName: string;
@@ -26,9 +27,23 @@ interface KtaCardProps {
 export function KtaCard({ member, showControls = true }: KtaCardProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
 
   const frontRenderRef = useRef<HTMLDivElement>(null);
   const backRenderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (member?.memberId) {
+      const payload = createMemberQrPayload({
+        memberId: member.memberId,
+        fullName: member.fullName,
+        ageCategory: member.ageCategory,
+      });
+      generateQrDataUrl(payload).then((url) => {
+        if (url) setQrCodeDataUrl(url);
+      });
+    }
+  }, [member]);
 
   const formattedValidUntil = member.validUntil
     ? new Date(member.validUntil).toLocaleDateString("id-ID", {
@@ -235,15 +250,23 @@ export function KtaCard({ member, showControls = true }: KtaCardProps) {
             {/* Magnetic Stripe Mockup */}
             <div className="w-full h-8 bg-neutral-950/80 -mx-6 -mt-6 sm:-mt-6 mb-3 border-y border-white/10" />
 
-            <div className="space-y-1.5 text-white/85 text-[9px] sm:text-[10px] leading-relaxed">
-              <p className="font-bold text-white uppercase tracking-wider text-[10px]">
-                Ketentuan Keanggotaan VOCA
-              </p>
-              <p>1. Kartu ini merupakan bukti keanggotaan resmi Vortex Community of Athletics.</p>
-              <p>2. Presensi latihan wajib memindai QR Code resmi kartu kepada instruktur.</p>
-              <p className="italic text-[#FFC700] font-medium">
-                &ldquo;Every Movement Matters — From First Steps to Great Achievements.&rdquo;
-              </p>
+            <div className="flex items-center gap-4 text-white/85 text-[9px] sm:text-[10px] leading-relaxed">
+              <div className="space-y-1.5 flex-1">
+                <p className="font-bold text-white uppercase tracking-wider text-[10px]">
+                  Ketentuan Keanggotaan VOCA
+                </p>
+                <p>1. Kartu ini merupakan bukti keanggotaan resmi Vortex Community of Athletics.</p>
+                <p>2. Presensi latihan wajib memindai QR Code resmi kartu kepada instruktur.</p>
+                <p className="italic text-[#FFC700] font-medium">
+                  &ldquo;Every Movement Matters — From First Steps to Great Achievements.&rdquo;
+                </p>
+              </div>
+              {qrCodeDataUrl && (
+                <div className="w-20 h-20 bg-white p-1.5 rounded-xl shrink-0 flex flex-col items-center justify-center shadow-lg">
+                  <img src={qrCodeDataUrl} alt="QR Presensi" className="w-full h-full object-contain" />
+                  <span className="text-[7px] text-neutral-800 font-bold font-mono mt-0.5">SCAN PRESENSI</span>
+                </div>
+              )}
             </div>
 
             <div className="pt-2 border-t border-white/15 flex justify-between items-end text-[9px]">
@@ -459,15 +482,35 @@ export function KtaCard({ member, showControls = true }: KtaCardProps) {
             }}
           />
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", color: "rgba(255,255,255,0.85)", fontSize: "11px", lineHeight: "1.5" }}>
-            <div style={{ fontWeight: "800", color: "#ffffff", textTransform: "uppercase", letterSpacing: "1px", fontSize: "12px" }}>
-              Ketentuan Keanggotaan VOCA
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", color: "rgba(255,255,255,0.85)", fontSize: "11px", lineHeight: "1.5" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ fontWeight: "800", color: "#ffffff", textTransform: "uppercase", letterSpacing: "1px", fontSize: "12px" }}>
+                Ketentuan Keanggotaan VOCA
+              </div>
+              <div>1. Kartu ini merupakan bukti keanggotaan resmi Vortex Community of Athletics.</div>
+              <div>2. Presensi latihan wajib memindai QR Code resmi kartu kepada instruktur.</div>
+              <div style={{ fontStyle: "italic", color: "#FFC700", fontWeight: "600", marginTop: "2px" }}>
+                &ldquo;Every Movement Matters — From First Steps to Great Achievements.&rdquo;
+              </div>
             </div>
-            <div>1. Kartu ini merupakan bukti keanggotaan resmi Vortex Community of Athletics.</div>
-            <div>2. Presensi latihan wajib memindai QR Code resmi kartu kepada instruktur.</div>
-            <div style={{ fontStyle: "italic", color: "#FFC700", fontWeight: "600", marginTop: "2px" }}>
-              &ldquo;Every Movement Matters — From First Steps to Great Achievements.&rdquo;
-            </div>
+            {qrCodeDataUrl && (
+              <div
+                style={{
+                  width: "80px",
+                  height: "80px",
+                  background: "#ffffff",
+                  padding: "6px",
+                  borderRadius: "10px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                }}
+              >
+                <img src={qrCodeDataUrl} alt="QR Presensi" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              </div>
+            )}
           </div>
 
           <div
