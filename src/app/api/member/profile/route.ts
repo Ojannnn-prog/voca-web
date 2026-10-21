@@ -85,3 +85,49 @@ export async function GET(request: Request) {
     );
   }
 }
+
+// Update Foto Profil / Data Anggota
+export async function PATCH(request: Request) {
+  try {
+    const cookieStore = await cookies();
+    const adminSession = cookieStore.get("voca_admin_session");
+    const memberSession = cookieStore.get("voca_member_session");
+
+    const isAdmin = await verifyAdminSessionToken(adminSession?.value);
+    const verifiedMemberId = await verifyMemberSessionToken(memberSession?.value);
+
+    if (!isAdmin && !verifiedMemberId) {
+      return NextResponse.json(
+        { error: "Akses ditolak. Silakan login terlebih dahulu." },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { photoUrl, memberId } = body;
+
+    const targetMemberId = isAdmin && memberId ? memberId : verifiedMemberId;
+
+    if (!targetMemberId) {
+      return NextResponse.json({ error: "Identitas anggota tidak valid." }, { status: 400 });
+    }
+
+    const [updated] = await db
+      .update(members)
+      .set({ photoUrl: photoUrl || null })
+      .where(eq(members.memberId, targetMemberId))
+      .returning();
+
+    return NextResponse.json({
+      success: true,
+      member: updated,
+      message: "Foto profil anggota berhasil disimpan.",
+    });
+  } catch (error: any) {
+    console.error("Gagal update foto profil member:", error);
+    return NextResponse.json(
+      { error: "Gagal memperbarui foto profil anggota.", details: error.message },
+      { status: 500 }
+    );
+  }
+}

@@ -31,6 +31,7 @@ import {
   LogOut,
   Copy,
   CheckCheck,
+  Camera,
 } from "lucide-react";
 
 interface MemberData {
@@ -48,6 +49,7 @@ interface MemberData {
   validUntil: string;
   status: string;
   bloodType: string | null;
+  photoUrl: string | null;
   emergencyContact: string | null;
   notes: string | null;
 }
@@ -104,6 +106,66 @@ function MemberPortalContent() {
   const [uploadErrorMsg, setUploadErrorMsg] = useState("");
   const [previewProofInvoice, setPreviewProofInvoice] = useState<MemberInvoice | null>(null);
   const [copiedBank, setCopiedBank] = useState<string | null>(null);
+
+  // Photo Upload States
+  const [isUpdatingPhoto, setIsUpdatingPhoto] = useState(false);
+  const [photoUpdateSuccess, setPhotoUpdateSuccess] = useState("");
+
+  const handleMemberPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentMember) return;
+
+    setIsUpdatingPhoto(true);
+    setPhotoUpdateSuccess("");
+    try {
+      const compressedDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = document.createElement("img");
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            let { width, height } = img;
+            const maxDim = 720;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return resolve(event.target?.result as string);
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+          };
+          img.onerror = () => resolve(event.target?.result as string);
+          img.src = event.target?.result as string;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/member/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: compressedDataUrl }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentMember({ ...currentMember, photoUrl: compressedDataUrl });
+        setPhotoUpdateSuccess("Foto profil KTA berhasil diperbarui!");
+        setTimeout(() => setPhotoUpdateSuccess(""), 3500);
+      }
+    } catch (err) {
+      console.error("Gagal update foto profil:", err);
+    } finally {
+      setIsUpdatingPhoto(false);
+    }
+  };
 
   const loadProfile = useCallback(async (idQuery: string) => {
     setIsLoading(true);
@@ -321,8 +383,16 @@ function MemberPortalContent() {
               <p className="text-xs font-bold text-neutral-900">{currentMember.fullName}</p>
               <p className="text-[10px] text-neutral-500 font-mono">{currentMember.memberId}</p>
             </div>
-            <div className="w-9 h-9 rounded-full bg-[#5E17EB] text-white flex items-center justify-center font-bold text-sm shadow-sm">
-              {currentMember.fullName.charAt(0)}
+            <div className="w-9 h-9 rounded-full bg-[#5E17EB] text-white flex items-center justify-center font-bold text-sm shadow-sm overflow-hidden border border-purple-200">
+              {currentMember.photoUrl ? (
+                <img
+                  src={currentMember.photoUrl}
+                  alt={currentMember.fullName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                currentMember.fullName.charAt(0)
+              )}
             </div>
             <button
               onClick={handleLogout}
@@ -523,7 +593,7 @@ function MemberPortalContent() {
             {/* TAB 2: KTA DIGITAL */}
             {activeTab === "kta" && (
               <div className="space-y-6 animate-fadeIn">
-                <div className="text-center max-w-lg mx-auto mb-4">
+                <div className="text-center max-w-lg mx-auto mb-2">
                   <h2 className="text-xl font-bold text-neutral-900">
                     Kartu Tanda Anggota Digital (KTA)
                   </h2>
@@ -533,6 +603,58 @@ function MemberPortalContent() {
                 </div>
 
                 <KtaCard member={currentMember} showControls={true} />
+
+                {/* Fitur Tambah / Ganti Foto Profil Anggota */}
+                <div className="max-w-md mx-auto p-4 rounded-2xl bg-white border border-neutral-200/80 shadow-sm flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-purple-50 text-[#5E17EB] border border-purple-200 flex items-center justify-center overflow-hidden shrink-0">
+                      {currentMember.photoUrl ? (
+                        <img
+                          src={currentMember.photoUrl}
+                          alt={currentMember.fullName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Camera className="w-5 h-5 text-purple-600" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-neutral-900">Foto Profil KTA</p>
+                      <p className="text-[10px] text-neutral-500">
+                        {currentMember.photoUrl ? "Foto resmi telah terpasang" : "Belum ada foto terpasang"}
+                      </p>
+                      {photoUpdateSuccess && (
+                        <p className="text-[10px] font-bold text-emerald-600">{photoUpdateSuccess}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <input
+                      type="file"
+                      id="member-photo-portal-input"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleMemberPhotoUpload}
+                    />
+                    <label
+                      htmlFor="member-photo-portal-input"
+                      className="cursor-pointer inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold transition shadow-sm"
+                    >
+                      {isUpdatingPhoto ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Mengunggah...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>{currentMember.photoUrl ? "Ganti Foto" : "Unggah Foto"}</span>
+                        </>
+                      )}
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
 

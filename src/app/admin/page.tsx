@@ -44,6 +44,11 @@ import {
   Printer,
   Download,
   Info,
+  BarChart3,
+  Dumbbell,
+  UserCog,
+  Camera,
+  Upload,
 } from "lucide-react";
 import {
   exportFinancialReportPdf,
@@ -123,6 +128,39 @@ function computeDueDateFromIssue(issueDateStr: string, days: number): string {
   }
 }
 
+// Kompresi foto profil anggota di browser sebelum dikirim ke API
+function compressImageFile(file: File, maxDim: number = 720, quality: number = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = document.createElement("img");
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(e.target?.result as string);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(e.target?.result as string);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function computeDaysBetween(issueDateStr: string, dueDateStr: string): number {
   if (!issueDateStr || !dueDateStr) return 7;
   try {
@@ -169,6 +207,7 @@ interface Member {
   validUntil: string;
   status: string;
   bloodType: string | null;
+  photoUrl: string | null;
   emergencyContact: string | null;
   notes: string | null;
   createdAt: string;
@@ -346,6 +385,7 @@ export default function AdminDashboardPage() {
     sportBranch: "Renang & Akuatik",
     monthlyFee: "347000",
     bloodType: "O",
+    photoUrl: "",
     emergencyContact: "",
     notes: "",
   });
@@ -646,6 +686,7 @@ export default function AdminDashboardPage() {
           sportBranch: "Renang & Akuatik",
           monthlyFee: "347000",
           bloodType: "O",
+          photoUrl: "",
           emergencyContact: "",
           notes: "",
         });
@@ -1681,6 +1722,228 @@ export default function AdminDashboardPage() {
                 <p className="text-[11px] text-neutral-500 mt-1">Perlu verifikasi admin</p>
               </div>
             </div>
+
+            {/* ================= SECTION STATISTIK & GRAFIK VISUAL DEMOGRAFI & TIM VOCA ================= */}
+            {(() => {
+              // 1. Hitung demografi kelompok usia lengkap dari Balita s/d Casis
+              const balitaCount = membersList.filter(
+                (m) => m.ageCategory === "Balita" || (m.participantAge !== null && m.participantAge <= 4)
+              ).length;
+              const kidsCount = membersList.filter(
+                (m) =>
+                  (m.ageCategory === "Anak-anak" || (m.participantAge !== null && m.participantAge >= 5 && m.participantAge <= 12)) &&
+                  m.ageCategory !== "Balita" &&
+                  m.ageCategory !== "Casis TNI/Polri" &&
+                  m.ageCategory !== "Terapi Disabilitas"
+              ).length;
+              const remajaCount = membersList.filter(
+                (m) =>
+                  (m.ageCategory === "Remaja" || (m.participantAge !== null && m.participantAge >= 13 && m.participantAge <= 17)) &&
+                  m.ageCategory !== "Casis TNI/Polri" &&
+                  m.ageCategory !== "Terapi Disabilitas"
+              ).length;
+              const dewasaCount = membersList.filter(
+                (m) =>
+                  (m.ageCategory === "Dewasa" || (m.participantAge !== null && m.participantAge >= 18)) &&
+                  m.ageCategory !== "Casis TNI/Polri" &&
+                  m.ageCategory !== "Terapi Disabilitas" &&
+                  m.ageCategory !== "Terapi Lansia"
+              ).length;
+              const casisCount = membersList.filter(
+                (m) => m.ageCategory === "Casis TNI/Polri" || (m.sportBranch && m.sportBranch.toLowerCase().includes("tni"))
+              ).length;
+              const terapiCount = membersList.filter(
+                (m) =>
+                  m.ageCategory === "Terapi Disabilitas" ||
+                  m.ageCategory === "Terapi Lansia" ||
+                  (m.sportBranch && m.sportBranch.toLowerCase().includes("terapi"))
+              ).length;
+
+              const ageGroups = [
+                { label: "Balita", sub: "1 - 4 Th", count: balitaCount, color: "from-amber-400 to-amber-500" },
+                { label: "Anak-anak", sub: "5 - 12 Th", count: kidsCount, color: "from-emerald-400 to-emerald-500" },
+                { label: "Remaja", sub: "13 - 17 Th", count: remajaCount, color: "from-blue-400 to-blue-500" },
+                { label: "Dewasa", sub: "18+ Th", count: dewasaCount, color: "from-purple-400 to-purple-500" },
+                { label: "Casis TNI", sub: "Kedinasan", count: casisCount, color: "from-red-500 to-rose-600" },
+                { label: "Terapi", sub: "Khusus/Lansia", count: terapiCount, color: "from-cyan-400 to-teal-500" },
+              ];
+
+              const maxAgeCount = Math.max(...ageGroups.map((g) => g.count), 1);
+              const totalMembersCount = membersList.length;
+
+              // 2. Hitung statistik coach dan admin (diagram batang kepinggir)
+              const coachUsers = systemUsersList.filter((u) => u.role === "coach");
+              const adminUsers = systemUsersList.filter((u) => u.role === "admin");
+              const staffUsers = systemUsersList.filter((u) => u.role === "staff");
+              const totalStaffTeam = Math.max(systemUsersList.length, 1);
+
+              const staffRoleStats = [
+                {
+                  role: "coach",
+                  label: "Pelatih / Coach",
+                  desc: "Instruktur Renang, Motorik & Atletik",
+                  count: coachUsers.length,
+                  pct: Math.round((coachUsers.length / totalStaffTeam) * 100),
+                  gradient: "from-blue-500 to-indigo-600",
+                  icon: Dumbbell,
+                },
+                {
+                  role: "admin",
+                  label: "Administrator",
+                  desc: "Tata Kelola Sistem, Keuangan & Verifikasi",
+                  count: adminUsers.length,
+                  pct: Math.round((adminUsers.length / totalStaffTeam) * 100),
+                  gradient: "from-purple-500 to-violet-600",
+                  icon: Shield,
+                },
+                {
+                  role: "staff",
+                  label: "Staf Operasional",
+                  desc: "Pengawas Venue & Administrasi Lapangan",
+                  count: staffUsers.length,
+                  pct: Math.round((staffUsers.length / totalStaffTeam) * 100),
+                  gradient: "from-emerald-500 to-teal-600",
+                  icon: UserCog,
+                },
+              ];
+
+              return (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* 1. GRAFIK BATANG VERTIKAL: DEMOGRAFI ANGGOTA LENGKAP */}
+                  <div className="lg:col-span-7 bg-white rounded-[24px] border border-neutral-200/80 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-purple-50 text-[#5E17EB] flex items-center justify-center font-bold">
+                            <BarChart3 className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-base text-neutral-900">Demografi Usia Anggota VOCA</h3>
+                            <p className="text-xs text-neutral-500">Distribusi peserta aktif dari Balita hingga Casis TNI/Polri</p>
+                          </div>
+                        </div>
+                        <span className="px-3 py-1 rounded-full bg-purple-50 text-[#5E17EB] text-xs font-bold border border-purple-200">
+                          Total {totalMembersCount} Anggota
+                        </span>
+                      </div>
+
+                      {/* Area Visual Grafik Batang */}
+                      <div className="mt-6 pt-4 pb-2 border-b border-neutral-100">
+                        <div className="h-44 flex items-end justify-between gap-2.5 sm:gap-4 px-1 sm:px-2">
+                          {ageGroups.map((group) => {
+                            const heightPct =
+                              totalMembersCount > 0 ? Math.max(12, Math.round((group.count / maxAgeCount) * 100)) : 10;
+                            return (
+                              <div key={group.label} className="flex-1 flex flex-col items-center h-full justify-end group">
+                                <span className="text-[11px] font-extrabold text-neutral-800 mb-1.5 transition-transform group-hover:scale-110">
+                                  {group.count}
+                                </span>
+                                <div className="w-full max-w-[48px] bg-neutral-100 rounded-t-xl overflow-hidden h-full flex items-end">
+                                  <div
+                                    style={{ height: `${heightPct}%` }}
+                                    className={`w-full rounded-t-xl bg-gradient-to-t ${group.color} transition-all duration-700 shadow-sm`}
+                                  />
+                                </div>
+                                <span className="text-[11px] font-bold text-neutral-800 mt-2 text-center leading-tight truncate w-full">
+                                  {group.label}
+                                </span>
+                                <span className="text-[9px] text-neutral-400 font-mono">
+                                  {group.sub}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ringkasan Footer Grafik */}
+                    <div className="grid grid-cols-3 gap-2 pt-4 text-center text-xs">
+                      <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                        <span className="text-[10px] text-neutral-400 block font-semibold uppercase">Balita & Anak</span>
+                        <span className="font-extrabold text-neutral-900 text-sm">{balitaCount + kidsCount} Peserta</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                        <span className="text-[10px] text-neutral-400 block font-semibold uppercase">Remaja & Dewasa</span>
+                        <span className="font-extrabold text-neutral-900 text-sm">{remajaCount + dewasaCount} Peserta</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-100">
+                        <span className="text-[10px] text-neutral-400 block font-semibold uppercase">Casis & Khusus</span>
+                        <span className="font-extrabold text-neutral-900 text-sm">{casisCount + terapiCount} Peserta</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. DIAGRAM BATANG KEPINGGIR (HORIZONTAL BAR CHART): COACH, ADMIN & STAF */}
+                  <div className="lg:col-span-5 bg-white rounded-[24px] border border-neutral-200/80 p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                            <Dumbbell className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-base text-neutral-900">Distribusi Tim & Manajemen</h3>
+                            <p className="text-xs text-neutral-500">Jumlah Coach, Admin & Staf Operasional</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleTabSwitch("users", "Kelola User, Pengurus, & Pelatih")}
+                          className="text-xs font-bold text-[#5E17EB] hover:underline"
+                        >
+                          Kelola
+                        </button>
+                      </div>
+
+                      {/* Area Batang Kepinggir (Horizontal Progress Bars) */}
+                      <div className="space-y-3.5 mt-5">
+                        {staffRoleStats.map((item) => {
+                          const IconComp = item.icon;
+                          return (
+                            <div key={item.role} className="p-3 rounded-2xl bg-neutral-50/70 border border-neutral-100 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-lg bg-white shadow-xs border border-neutral-200 flex items-center justify-center text-neutral-700">
+                                    <IconComp className="w-3.5 h-3.5" />
+                                  </div>
+                                  <div>
+                                    <span className="font-bold text-neutral-900">{item.label}</span>
+                                    <p className="text-[10px] text-neutral-400">{item.desc}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-extrabold text-neutral-900 text-sm">{item.count}</span>
+                                  <span className="text-[10px] text-neutral-400 ml-1">Orang</span>
+                                </div>
+                              </div>
+
+                              {/* Batang Horizontal Kepinggir */}
+                              <div className="w-full h-2.5 rounded-full bg-neutral-200/70 overflow-hidden flex items-center p-0.5">
+                                <div
+                                  style={{ width: `${Math.max(6, item.pct)}%` }}
+                                  className={`h-full rounded-full bg-gradient-to-r ${item.gradient} transition-all duration-700 shadow-xs`}
+                                />
+                              </div>
+
+                              <div className="flex justify-between items-center text-[10px] text-neutral-400 pt-0.5">
+                                <span>Porsi Personel:</span>
+                                <span className="font-bold text-neutral-700">{item.pct}% dari total tim</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Footer Info Tim */}
+                    <div className="mt-4 pt-3 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-500">
+                      <span>Total Pengguna Sistem Aktif:</span>
+                      <span className="font-bold text-neutral-900 font-mono">{systemUsersList.length} Akun Terdaftar</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Quick Actions & 2 Tables Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -2894,6 +3157,64 @@ export default function AdminDashboardPage() {
             </div>
 
             <form onSubmit={handleUpdateMemberProfile} className="space-y-4 text-xs">
+              {/* Foto Profil Anggota untuk KTA */}
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">
+                  Foto Profil Keanggotaan (KTA Digital)
+                </label>
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-2xl border border-neutral-200">
+                  <div className="w-14 h-14 rounded-xl bg-neutral-200 border border-neutral-300 flex items-center justify-center overflow-hidden shrink-0">
+                    {editingMember.photoUrl ? (
+                      <img
+                        src={editingMember.photoUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Camera className="w-5 h-5 text-neutral-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <input
+                      type="file"
+                      id="edit-member-photo-input"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const compressed = await compressImageFile(file);
+                            setEditingMember({ ...editingMember, photoUrl: compressed });
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="edit-member-photo-input"
+                        className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#5E17EB] text-white text-[11px] font-bold hover:bg-[#4d10c7] transition"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{editingMember.photoUrl ? "Ganti Foto" : "Pilih Foto"}</span>
+                      </label>
+                      {editingMember.photoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingMember({ ...editingMember, photoUrl: null })}
+                          className="px-2.5 py-1.5 rounded-xl border border-neutral-200 text-neutral-600 hover:text-red-600 text-[11px] font-semibold"
+                        >
+                          Hapus Foto
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-neutral-400">Foto akan tampil pada kartu KTA digital resmi</p>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-neutral-700 mb-1">Nama Lengkap *</label>
                 <input
@@ -4039,6 +4360,64 @@ export default function AdminDashboardPage() {
             </div>
 
             <form onSubmit={handleAddMember} className="space-y-4 text-xs">
+              {/* Foto Profil Anggota Baru */}
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">
+                  Foto Profil Keanggotaan (KTA Digital)
+                </label>
+                <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-2xl border border-neutral-200">
+                  <div className="w-14 h-14 rounded-xl bg-neutral-200 border border-neutral-300 flex items-center justify-center overflow-hidden shrink-0">
+                    {newMemberForm.photoUrl ? (
+                      <img
+                        src={newMemberForm.photoUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Camera className="w-5 h-5 text-neutral-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <input
+                      type="file"
+                      id="new-member-photo-input"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const compressed = await compressImageFile(file);
+                            setNewMemberForm({ ...newMemberForm, photoUrl: compressed });
+                          } catch (err) {
+                            console.error(err);
+                          }
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="new-member-photo-input"
+                        className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#5E17EB] text-white text-[11px] font-bold hover:bg-[#4d10c7] transition"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Pilih Foto</span>
+                      </label>
+                      {newMemberForm.photoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setNewMemberForm({ ...newMemberForm, photoUrl: "" })}
+                          className="px-2.5 py-1.5 rounded-xl border border-neutral-200 text-neutral-600 hover:text-red-600 text-[11px] font-semibold"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-neutral-400">Format JPG/PNG, otomatis dikompresi untuk KTA resmi</p>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-neutral-700 mb-1">Nama Lengkap *</label>
                 <input

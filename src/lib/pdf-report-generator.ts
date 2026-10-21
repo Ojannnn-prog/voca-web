@@ -1,7 +1,10 @@
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+
 /**
  * VOCA Athletic Community - Official Report & PDF Generator
- * Menghasilkan dokumen laporan berstandar akuntansi & organisasi resmi
- * dengan Kop Surat VOCA, tata letak A4 presisi, dan lembar pengesahan.
+ * Menghasilkan dokumen laporan resmi standar akuntansi & organisasi VOCA
+ * langsung dalam format file PDF murni yang otomatis terunduh tanpa web viewer.
  */
 
 export interface FinancialTrxItem {
@@ -70,116 +73,88 @@ const KOP_SURAT_HTML = `
   </div>
 `;
 
-function triggerPrintWindow(title: string, bodyContent: string) {
-  const printWin = window.open("", "_blank", "width=1050,height=800");
-  if (!printWin) {
-    alert("Popup diblokir oleh browser. Izinkan popup untuk mencetak laporan PDF.");
-    return;
-  }
+export function escapeHtml(str: string | number | null | undefined): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-  const fullHtml = `
-    <!DOCTYPE html>
-    <html lang="id">
-      <head>
-        <meta charset="UTF-8">
-        <title>${title}</title>
-        <style>
-          @page {
-            size: A4;
-            margin: 1.5cm 1.2cm 1.5cm 1.2cm;
-          }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            color: #111;
-            background: #fff;
-            margin: 0;
-            padding: 20px;
-            font-size: 11px;
-            line-height: 1.4;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 14px 0;
-            font-size: 10px;
-          }
-          th {
-            background-color: #f3f4f6;
-            color: #1f2937;
-            font-weight: 700;
-            text-align: left;
-            padding: 7px 8px;
-            border: 1px solid #d1d5db;
-          }
-          td {
-            padding: 6px 8px;
-            border: 1px solid #e5e7eb;
-            vertical-align: top;
-          }
-          tr:nth-child(even) {
-            background-color: #fafafa;
-          }
-          .kpi-card {
-            border: 1px solid #e5e7eb;
-            background: #f9fafb;
-            border-radius: 8px;
-            padding: 10px 14px;
-            flex: 1;
-          }
-          .kpi-title {
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: #6b7280;
-            margin-bottom: 3px;
-          }
-          .kpi-value {
-            font-size: 14px;
-            font-weight: 800;
-            color: #111827;
-          }
-          .signatures {
-            margin-top: 35px;
-            display: flex;
-            justify-content: space-between;
-            page-break-inside: avoid;
-          }
-          .sign-box {
-            width: 200px;
-            text-align: center;
-          }
-          .sign-line {
-            margin-top: 55px;
-            border-top: 1px solid #333;
-            padding-top: 4px;
-            font-weight: bold;
-          }
-          @media print {
-            body { padding: 0; }
-            .no-print { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="no-print" style="margin-bottom: 15px; padding: 10px 14px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-          <span style="color: #4338ca; font-weight: bold;">Dokumen siap dicetak atau disimpan sebagai PDF</span>
-          <button onclick="window.print()" style="background: #5E17EB; color: white; border: none; padding: 6px 16px; border-radius: 6px; font-weight: bold; cursor: pointer;">
-            🖨️ Cetak / Simpan PDF
-          </button>
-        </div>
-        ${KOP_SURAT_HTML}
-        ${bodyContent}
-      </body>
-    </html>
+async function triggerDirectDownloadPdf(title: string, bodyContent: string) {
+  if (typeof window === "undefined") return;
+
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.left = "-9999px";
+  container.style.top = "-9999px";
+  container.style.width = "820px";
+  container.style.padding = "30px 32px";
+  container.style.background = "#ffffff";
+  container.style.color = "#111111";
+  container.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  container.style.fontSize = "11px";
+  container.style.lineHeight = "1.4";
+  container.style.boxSizing = "border-box";
+  container.innerHTML = `
+    <style>
+      table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 10px; }
+      th { background-color: #f3f4f6; color: #1f2937; font-weight: 700; text-align: left; padding: 7px 8px; border: 1px solid #d1d5db; }
+      td { padding: 6px 8px; border: 1px solid #e5e7eb; vertical-align: top; }
+      tr:nth-child(even) { background-color: #fafafa; }
+      .kpi-card { border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 8px; padding: 10px 14px; flex: 1; }
+      .kpi-title { font-size: 9px; font-weight: 700; text-transform: uppercase; color: #6b7280; margin-bottom: 3px; }
+      .kpi-value { font-size: 14px; font-weight: 800; color: #111827; }
+      .signatures { margin-top: 35px; display: flex; justify-content: space-between; page-break-inside: avoid; }
+      .sign-box { width: 200px; text-align: center; }
+      .sign-line { margin-top: 55px; border-top: 1px solid #333; padding-top: 4px; font-weight: bold; }
+    </style>
+    ${KOP_SURAT_HTML}
+    ${bodyContent}
   `;
 
-  printWin.document.open();
-  printWin.document.write(fullHtml);
-  printWin.document.close();
-  printWin.focus();
-  setTimeout(() => {
-    printWin.print();
-  }, 400);
+  document.body.appendChild(container);
+
+  try {
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: "#ffffff",
+      logging: false,
+    });
+
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfPageWidth = pdf.internal.pageSize.getWidth();
+    const pdfPageHeight = pdf.internal.pageSize.getHeight();
+    const imgHeight = (canvas.height * pdfPageWidth) / canvas.width;
+
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, "JPEG", 0, position, pdfPageWidth, imgHeight, undefined, "FAST");
+    heightLeft -= pdfPageHeight;
+
+    while (heightLeft > 0) {
+      position -= pdfPageHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, position, pdfPageWidth, imgHeight, undefined, "FAST");
+      heightLeft -= pdfPageHeight;
+    }
+
+    const cleanFilename = `${title.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf`;
+    pdf.save(cleanFilename);
+  } catch (err) {
+    console.error("Gagal export PDF:", err);
+    alert("Gagal mengunduh file PDF secara langsung. Silakan coba kembali.");
+  } finally {
+    if (document.body.contains(container)) {
+      document.body.removeChild(container);
+    }
+  }
 }
 
 // 1. Export Laporan Keuangan Rinci (Harian, Bulanan, Semester, Tahunan)
@@ -322,7 +297,7 @@ export function exportFinancialReportPdf({
     </div>
   `;
 
-  triggerPrintWindow(`Laporan_Keuangan_VOCA_${periodTitle.replace(/\s+/g, "_")}`, content);
+  triggerDirectDownloadPdf(`Laporan_Keuangan_VOCA_${periodTitle.replace(/\s+/g, "_")}`, content);
 }
 
 // 2. Export Laporan Anggota / Peserta Lengkap (Biodata, Kelas, Usia, Kontak)
@@ -459,7 +434,7 @@ export function exportMembersReportPdf({
     </div>
   `;
 
-  triggerPrintWindow("Laporan_Anggota_VOCA", content);
+  triggerDirectDownloadPdf("Laporan_Anggota_VOCA", content);
 }
 
 // 3. Export Laporan Staf & Pelatih (Kelola User)
@@ -556,5 +531,5 @@ export function exportStaffReportPdf({
     </div>
   `;
 
-  triggerPrintWindow("Laporan_Staf_Pelatih_VOCA", content);
+  triggerDirectDownloadPdf("Laporan_Staf_Pelatih_VOCA", content);
 }

@@ -33,6 +33,7 @@ export const members = pgTable("members", {
   validUntil: timestamp("valid_until").notNull(), // Tanggal akhir masa aktif membership
   status: varchar("status", { length: 50 }).default("active").notNull(), // active | inactive | suspended
   bloodType: varchar("blood_type", { length: 10 }).default("O"),
+  photoUrl: text("photo_url"), // URL / base64 foto profil anggota untuk KTA resmi
   emergencyContact: varchar("emergency_contact", { length: 100 }),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

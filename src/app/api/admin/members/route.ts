@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       sportBranch,
       monthlyFee,
       bloodType,
+      photoUrl,
       emergencyContact,
       notes,
     } = body;
@@ -112,6 +113,7 @@ export async function POST(request: Request) {
         validUntil,
         status: "active",
         bloodType: bloodType || "O",
+        photoUrl: photoUrl || null,
         emergencyContact: emergencyContact ? emergencyContact.trim() : null,
         notes: notes ? notes.trim() : null,
       })
@@ -153,6 +155,7 @@ export async function PATCH(request: Request) {
       sportBranch,
       monthlyFee,
       bloodType,
+      photoUrl,
       emergencyContact,
       notes,
       validUntil,
@@ -175,6 +178,7 @@ export async function PATCH(request: Request) {
     if (sportBranch !== undefined) updateData.sportBranch = sportBranch;
     if (monthlyFee !== undefined) updateData.monthlyFee = parseInt(monthlyFee, 10);
     if (bloodType !== undefined) updateData.bloodType = bloodType;
+    if (photoUrl !== undefined) updateData.photoUrl = photoUrl;
     if (emergencyContact !== undefined) updateData.emergencyContact = emergencyContact ? emergencyContact.trim() : null;
     if (notes !== undefined) updateData.notes = notes ? notes.trim() : null;
 
